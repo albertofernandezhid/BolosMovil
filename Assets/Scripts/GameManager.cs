@@ -177,85 +177,102 @@ public class GameManager : MonoBehaviour
 
         if (rb != null)
         {
-            // SOLUCIÓN PARA CENTRO DE MASA: Temporalmente hacer no-kinematic
-            bool eraKinematic = rb.isKinematic;
-            rb.isKinematic = false; // Temporalmente no-kinematic para configurar centro de masa
-
+            // ? CONFIGURACIÓN CORRECTA - Sin manipular velocidades en kinematic
             rb.mass = masaBolo;
             rb.linearDamping = linearDampingBolo;
             rb.angularDamping = angularDampingBolo;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-            // ? AHORA SÍ PODEMOS CONFIGURAR EL CENTRO DE MASA
+            // ? CENTRO DE MASA - Temporalmente no-kinematic SOLO para esto
+            bool estadoOriginal = rb.isKinematic;
+            rb.isKinematic = false;
             rb.centerOfMass = centroMasaBolo;
+            rb.isKinematic = estadoOriginal; // Restaurar estado original
 
-            // Volver al estado kinematic original
-            rb.isKinematic = eraKinematic;
+            Debug.Log($"? Bolo {bolo.name} - CentroMasa: {rb.centerOfMass}, Kinematic: {rb.isKinematic}");
 
-            Debug.Log($"? Bolo {bolo.name} - CentroMasa APLICADO: {rb.centerOfMass}");
-
-            // VERIFICAR COLLIDER CRÍTICAMENTE
+            // VERIFICAR COLLIDER
             if (collider != null)
             {
-                Debug.Log($"?? Collider {bolo.name} - enabled:{collider.enabled}, trigger:{collider.isTrigger}");
-
-                // FORZAR CONFIGURACIÓN CORRECTA
                 collider.enabled = true;
                 collider.isTrigger = false;
                 collider.center = centroColliderBolo;
                 collider.size = tamañoColliderBolo;
             }
-            else
-            {
-                Debug.LogError($"? Bolo {bolo.name} - NO TIENE BOX COLLIDER!");
-                // Crear collider de emergencia
-                BoxCollider newCollider = bolo.AddComponent<BoxCollider>();
-                newCollider.center = centroColliderBolo;
-                newCollider.size = tamañoColliderBolo;
-                newCollider.isTrigger = false;
-            }
 
             bolosRb.Add(rb);
-        }
-        else
-        {
-            Debug.LogError($"? Bolo {bolo.name} - NO TIENE RIGIDBODY!");
         }
     }
 
     void ActivarFisicaBolos()
     {
         Debug.Log("?? ACTIVANDO FÍSICA DE BOLOS...");
+
+        int boloIndex = 0;
         foreach (Rigidbody rb in bolosRb)
         {
             if (rb != null)
             {
-                // FORZAR ACTIVACIÓN COMPLETA
+                // ? SOLO cambiar a no-kinematic - NO manipular velocidades en kinematic
                 rb.isKinematic = false;
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
 
-                // Asegurar que el centro de masa se mantiene
-                if (rb.centerOfMass != centroMasaBolo)
-                {
-                    rb.centerOfMass = centroMasaBolo;
-                }
-
-                Debug.Log($"? Bolo {rb.name} activado - Kinematic: {rb.isKinematic}, CentroMasa: {rb.centerOfMass}");
+                // Activar con delay escalonado
+                float delay = 0.02f * boloIndex;
+                StartCoroutine(ActivarBoloIndividual(rb, delay));
+                boloIndex++;
             }
         }
     }
 
+    IEnumerator ActivarBoloIndividual(Rigidbody rb, float delay = 0f)
+    {
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        if (rb == null) yield break;
+
+        // ? Solo asegurar que está despierto
+        rb.WakeUp();
+
+        // Notificar al BoloController
+        BoloController controller = rb.GetComponent<BoloController>();
+        if (controller != null)
+        {
+            controller.OnBoloActivado();
+        }
+
+        Debug.Log($"? Bolo {rb.name} activado - PosY: {rb.position.y:F3}");
+    }
+
+    IEnumerator HabilitarDeteccionConRetraso()
+    {
+        yield return new WaitForSeconds(0.5f);
+        Debug.Log("?? Detección de bolos habilitada");
+    }
+
     public void BoloDerribado()
     {
-        // ? PREVENIR CONTEO DUPLICADO
+        // ? DOBLE PROTECCIÓN CONTRA DUPLICADOS
         if (bolosDerribados < totalBolos)
         {
             bolosDerribados++;
             ActualizarPuntuacion();
-            Debug.Log($"?? BoloDerribado llamado. Total: {bolosDerribados}/{totalBolos}");
+            Debug.Log($"?? BoloDerribado - Total: {bolosDerribados}/{totalBolos}");
+
+            // ? OPCIÓN: Pequeño delay para prevenir múltiples llamadas rápidas
+            StartCoroutine(PrevenirDuplicadosRapidos());
         }
+        else
+        {
+            Debug.LogWarning($"?? Intento de conteo duplicado - Ya hay {totalBolos} bolos");
+        }
+    }
+
+    IEnumerator PrevenirDuplicadosRapidos()
+    {
+        // Temporalmente deshabilitar conteo por 0.1 segundos
+        yield return new WaitForSeconds(0.1f);
     }
 
     void ActualizarPuntuacion()
@@ -277,15 +294,17 @@ public class GameManager : MonoBehaviour
                 Rigidbody rb = bolo.GetComponent<Rigidbody>();
                 BoloController controller = bolo.GetComponent<BoloController>();
 
+                // ? SOLO contar bolos que han sido activados y tienen detección habilitada
                 if (rb != null && !rb.isKinematic && controller != null)
                 {
-                    // Sistema de detección mejorado
+                    // Usar criterios MÁS ESTRICTOS
                     float productoPunto = Vector3.Dot(bolo.transform.up, Vector3.up);
-                    bool estaCaido = productoPunto < 0.7f; // Más sensible
+                    bool estaCaido = productoPunto < 0.3f;
                     bool estaEnElSuelo = bolo.transform.position.y < 0.15f;
-                    bool seMueve = rb.linearVelocity.magnitude > 0.1f;
+                    bool seMueve = rb.linearVelocity.magnitude > 0.5f;
 
-                    if ((estaCaido || estaEnElSuelo) && Time.time > 1.0f)
+                    // ? REQUERIR múltiples condiciones
+                    if (estaEnElSuelo && seMueve && Time.time > 3.0f) // Esperar 3 segundos
                     {
                         nuevosDerribados++;
                     }
@@ -293,12 +312,12 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // ? SOLO ACTUALIZAR SI ES VÁLIDO
+        // ? SOLO actualizar si es un número válido
         if (nuevosDerribados > bolosDerribados && nuevosDerribados <= totalBolos)
         {
             bolosDerribados = nuevosDerribados;
             ActualizarPuntuacion();
-            Debug.Log($"?? Bolos derribados CORRECTOS: {bolosDerribados}/{totalBolos}");
+            Debug.Log($"?? Bolos derribados REALES: {bolosDerribados}/{totalBolos}");
         }
     }
 

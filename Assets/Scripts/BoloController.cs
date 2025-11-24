@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using UnityEngine;
 
 public class BoloController : MonoBehaviour
@@ -5,27 +6,41 @@ public class BoloController : MonoBehaviour
     private GameManager gameManager;
     private bool yaContado = false;
     private Rigidbody rb;
-    private float tiempoUltimaColision = 0f;
-    private const float tiempoEsperaColision = 0.1f; // Evitar múltiples colisiones rápidas
+    private bool deteccionHabilitada = false;
+    private float tiempoActivacion;
+    private float ultimaColisionTiempo = 0f;
+    private const float tiempoMinimoEntreColisiones = 0.5f; // Medio segundo entre detecciones
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         gameManager = FindAnyObjectByType<GameManager>();
+        deteccionHabilitada = false;
     }
 
     void Update()
     {
-        if (!yaContado && rb != null && !rb.isKinematic)
+        if (!deteccionHabilitada && rb != null && !rb.isKinematic)
         {
-            // Sistema mejorado de detección
+            if (Time.time - tiempoActivacion > 2.0f)
+            {
+                deteccionHabilitada = true;
+                Debug.Log($"?? Bolo {name} - Detección habilitada");
+            }
+            return;
+        }
+
+        if (!yaContado && deteccionHabilitada && rb != null && !rb.isKinematic)
+        {
+            // Sistema de detección por ángulo/posición (opcional)
             float productoPunto = Vector3.Dot(transform.up, Vector3.up);
-            bool estaCaido = productoPunto < 0.6f; // Más de 45 grados
-            bool estaEnElSuelo = transform.position.y < 0.2f;
+            bool estaCaido = productoPunto < 0.3f;
+            bool estaEnElSuelo = transform.position.y < 0.15f;
             bool seEstaMoviendo = rb.linearVelocity.magnitude > 0.5f;
 
-            if ((estaCaido || estaEnElSuelo) && Time.time > 1.0f) // Esperar 1 segundo después del lanzamiento
+            if (estaEnElSuelo && seEstaMoviendo && Time.time - ultimaColisionTiempo > tiempoMinimoEntreColisiones)
             {
+                Debug.Log($"?? Bolo {name} detectado por posición");
                 MarcarComoDerribado();
             }
         }
@@ -33,23 +48,28 @@ public class BoloController : MonoBehaviour
 
     void OnCollisionEnter(Collision collision)
     {
-        if (!yaContado && rb != null && !rb.isKinematic)
+        if (!yaContado && deteccionHabilitada && rb != null && !rb.isKinematic)
         {
-            // PREVENIR MÚLTIPLES DETECCIONES RÁPIDAS
-            if (Time.time - tiempoUltimaColision < tiempoEsperaColision)
-                return;
+            Debug.Log($"?? COLISIÓN - Bolo: {name}, Con: {collision.gameObject.name}, Fuerza: {collision.relativeVelocity.magnitude:F2}");
 
-            // Solo colisiones fuertes con bola u otros bolos
-            bool esColisionFuerte = collision.relativeVelocity.magnitude > 1.0f;
-            bool esConBolaOBolo = collision.gameObject.CompareTag("Bola") ||
-                                 collision.gameObject.CompareTag("Bolo");
-
-            if (esColisionFuerte && esConBolaOBolo)
+            if (Time.time - ultimaColisionTiempo < tiempoMinimoEntreColisiones)
             {
-                tiempoUltimaColision = Time.time;
+                Debug.Log($"? COLISIÓN IGNORADA - Demasiado pronto");
+                return;
+            }
+
+            if (collision.relativeVelocity.magnitude > 3.0f)
+            {
+                ultimaColisionTiempo = Time.time;
+                Debug.Log($"?? COLISIÓN ACEPTADA");
                 MarcarComoDerribado();
             }
         }
+    }
+
+    public void OnBoloActivado()
+    {
+        tiempoActivacion = Time.time;
     }
 
     private void MarcarComoDerribado()
@@ -57,13 +77,16 @@ public class BoloController : MonoBehaviour
         if (!yaContado)
         {
             yaContado = true;
-            Debug.Log($"=== BLO {gameObject.name} MARCADO CORRECTAMENTE ===");
+            Debug.Log($"? BLO {gameObject.name} MARCADO CORRECTAMENTE");
 
-            // Desactivar detecciones futuras
+            // ? DESACTIVAR MÁS COMPONENTES PARA PREVENIR DETECCIÓN FUTURA
             if (TryGetComponent<Collider>(out var collider))
             {
                 collider.enabled = false;
             }
+
+            // ? Cambiar layer para evitar más colisiones
+            gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
 
             if (gameManager != null)
             {
