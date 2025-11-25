@@ -16,64 +16,90 @@ public class GameManager : MonoBehaviour
     public Camera preLaunchCamera;
     public Camera ballCamera;
 
-    [Header("CONFIGURACI”N C¡MARA SEGUIDORA")]
-    public float offsetZC·mara = -2f;
-    public float suavizadoC·mara = 5f;
+    [Header("CONFIGURACI√ìN C√ÅMARA SEGUIDORA")]
+    public float offsetZC√°mara = -2f;
+    public float suavizadoC√°mara = 5f;
 
     [Header("UI")]
     public Button botonLanzar;
     public TextMeshProUGUI textoInstrucciones;
     public TextMeshProUGUI textoPuntuacion;
+    public Canvas panelFinal;
 
-    [Header("AJUSTES FÕSICA - BOLA")]
+    [Header("DETECCI√ìN BOLA")]
+    public BoxCollider colliderDetectorBola;
+    public BoxCollider colliderFueraPista;
+    [Tooltip("Tiempo en segundos que debe estar la bola quieta para mostrar el panel")]
+    public float tiempoDetencionParaPanel = 2f;
+
+    [Header("AJUSTES F√çSICA - BOLA")]
     public float masaBola = 3f;
     public float linearDampingBola = 0.5f;
     public float angularDampingBola = 0.8f;
 
-    [Header("AJUSTES FÕSICA - BOLOS")]
+    [Header("AJUSTES F√çSICA - BOLOS")]
     public float masaBolo = 2f;
     public float linearDampingBolo = 0.3f;
     public float angularDampingBolo = 0.1f;
 
     [Header("CENTRO DE MASA BOLOS")]
-    [Tooltip("Coordenadas locales. Valores m·s positivos en Z = m·s inestables")]
-    public Vector3 centroMasaBolo = new(0f, 0f, 0.2f);
+    [Tooltip("Coordenadas locales. Valores m√°s positivos en Y = m√°s inestables")]
+    public Vector3 centroMasaBolo = new(0f, 0.4f, 0.1f); // M√°s alto y hacia adelante
 
     [Header("AJUSTES FUERZA LANZAMIENTO")]
     public float fuerzaMinima = 8f;
     public float fuerzaMaxima = 15f;
 
-    [Header("AJUSTES BOLOS - COLLIDER Y ESCALA")]
-    public Vector3 escalaBolo = new(10f, 10f, 10f);
-    public Vector3 centroColliderBolo = new(-2.328306e-10f, 4.656612e-10f, 0.02020354f);
-    public Vector3 tamaÒoColliderBolo = new(0.01182694f, 0.01233853f, 0.04040708f);
+    [Header("CONFIGURACI√ìN BOLOS - POSICI√ìN CORREGIDA")]
+    public Vector3[] posicionesBolos = new Vector3[10]
+    {
+        new(0f, 0.61f, 19f),
+        new(-0.2f, 0.61f, 19.3f),
+        new(0.2f, 0.61f, 19.3f),
+        new(-0.4f, 0.61f, 19.6f),
+        new(0f, 0.61f, 19.6f),
+        new(0.4f, 0.61f, 19.6f),
+        new(-0.6f, 0.61f, 19.9f),
+        new(-0.2f, 0.61f, 19.9f),
+        new(0.2f, 0.61f, 19.9f),
+        new(0.6f, 0.61f, 19.9f)
+    };
 
-    [Header("AJUSTES BOLA - COLLIDER")]
-    public Vector3 centroColliderBola = new(0f, 9.581745e-06f, -7.256568e-06f);
-    public float radioColliderBola = 0.00082f;
+    [Header("ROTACI√ìN INICIAL BOLOS")]
+    public Vector3 rotacionInicialBolos = new Vector3(0f, 0f, 0f);
+
+    [Header("UMBRALES DETECCI√ìN CA√çDA")]
+    [Tooltip("Producto punto m√≠nimo para considerar bolo de pie (0-1). 0.5 = ~60¬∞")]
+    public float umbralProductoPunto = 0.5f; // M√°s permisivo - 60 grados
+    [Tooltip("Velocidad m√≠nima para considerar movimiento")]
+    public float umbralVelocidad = 0.1f; // M√°s bajo
 
     // COMPONENTES CACHEADOS
     private Rigidbody bolaRb;
-    private SphereCollider bolaCollider;
     private readonly List<GameObject> bolos = new();
     private readonly List<Rigidbody> bolosRb = new();
+    private readonly List<BoloController> boloControllers = new();
     private bool enFaseCarga = false;
     private float posicionXFijada = 0f;
-    private Vector3 posicionInicialBola;
+    private Vector3 posicionInicialBola = new(0f, 0.54f, 0f);
     private int bolosDerribados = 0;
     private readonly int totalBolos = 10;
+    private bool bolaEnZonaDetencion = false;
+    private bool detencionProcesada = false;
+    private float tiempoBolaQuieta = 0f;
 
     private enum EstadoJuego { Posicionamiento, Carga, Lanzada, Finalizado }
     private EstadoJuego estadoActual = EstadoJuego.Posicionamiento;
 
     void Start()
     {
-        // CACHEAR COMPONENTES UNA VEZ
         bolaRb = bola.GetComponent<Rigidbody>();
-        bolaCollider = bola.GetComponent<SphereCollider>();
-
         ConfigurarFisicaBola();
-        posicionInicialBola = bola.transform.position;
+
+        if (panelFinal != null)
+        {
+            panelFinal.gameObject.SetActive(false);
+        }
 
         if (botonLanzar != null)
         {
@@ -93,13 +119,6 @@ public class GameManager : MonoBehaviour
             bolaRb.angularDamping = angularDampingBola;
             bolaRb.interpolation = RigidbodyInterpolation.Interpolate;
             bolaRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-
-            // USAR COMPONENTE CACHEADO
-            if (bolaCollider != null)
-            {
-                bolaCollider.center = centroColliderBola;
-                bolaCollider.radius = radioColliderBola;
-            }
         }
     }
 
@@ -111,8 +130,8 @@ public class GameManager : MonoBehaviour
         }
         bolos.Clear();
         bolosRb.Clear();
+        boloControllers.Clear();
 
-        // OPTIMIZADO: Usar SetPositionAndRotation en una llamada
         bola.transform.SetPositionAndRotation(posicionInicialBola, Quaternion.identity);
         bolaRb.isKinematic = true;
 
@@ -134,71 +153,75 @@ public class GameManager : MonoBehaviour
             textoInstrucciones.gameObject.SetActive(true);
         }
 
+        if (panelFinal != null)
+        {
+            panelFinal.gameObject.SetActive(false);
+        }
+
         bolosDerribados = 0;
         ActualizarPuntuacion();
 
         enFaseCarga = false;
         estadoActual = EstadoJuego.Posicionamiento;
+        bolaEnZonaDetencion = false;
+        detencionProcesada = false;
+        tiempoBolaQuieta = 0f;
+
         CrearBolos();
     }
 
     void CrearBolos()
     {
-        Vector3[] posiciones = new Vector3[10]
+        for (int i = 0; i < posicionesBolos.Length; i++)
         {
-            new(0f, 0.4f, 19f),
-            new(-0.2f, 0.4f, 19.3f),
-            new(0.2f, 0.4f, 19.3f),
-            new(-0.4f, 0.4f, 19.6f),
-            new(0f, 0.4f, 19.6f),
-            new(0.4f, 0.4f, 19.6f),
-            new(-0.6f, 0.4f, 19.9f),
-            new(-0.2f, 0.4f, 19.9f),
-            new(0.2f, 0.4f, 19.9f),
-            new(0.6f, 0.4f, 19.9f)
-        };
-
-        for (int i = 0; i < posiciones.Length; i++)
-        {
-            GameObject boloObj = Instantiate(boloPrefab, posiciones[i], Quaternion.Euler(-90f, 0f, 0f));
-            boloObj.transform.localScale = escalaBolo;
+            GameObject boloObj = Instantiate(boloPrefab, posicionesBolos[i], Quaternion.Euler(rotacionInicialBolos));
+            boloObj.transform.localScale = Vector3.one;
 
             ConfigurarFisicaBolo(boloObj);
             bolos.Add(boloObj);
 
-            Debug.Log($"Bolo {i + 1} creado. RotaciÛn: {boloObj.transform.rotation.eulerAngles}");
+            BoloController controller = boloObj.GetComponent<BoloController>();
+            if (controller != null)
+            {
+                boloControllers.Add(controller);
+            }
         }
     }
 
     void ConfigurarFisicaBolo(GameObject bolo)
     {
         Rigidbody rb = bolo.GetComponent<Rigidbody>();
-        BoxCollider collider = bolo.GetComponent<BoxCollider>();
+        Collider collider = bolo.GetComponent<Collider>();
 
         if (rb != null)
         {
-            // ? CONFIGURACI”N CORRECTA - Sin manipular velocidades en kinematic
+            bool estadoOriginal = rb.isKinematic;
+
             rb.mass = masaBolo;
             rb.linearDamping = linearDampingBolo;
             rb.angularDamping = angularDampingBolo;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-            // ? CENTRO DE MASA - Temporalmente no-kinematic SOLO para esto
-            bool estadoOriginal = rb.isKinematic;
+            // Configurar centro de masa para mayor inestabilidad
             rb.isKinematic = false;
             rb.centerOfMass = centroMasaBolo;
-            rb.isKinematic = estadoOriginal; // Restaurar estado original
+            rb.isKinematic = estadoOriginal;
 
-            Debug.Log($"? Bolo {bolo.name} - CentroMasa: {rb.centerOfMass}, Kinematic: {rb.isKinematic}");
+            // MEJORAR F√çSICA PARA COMPORTAMIENTO REALISTA
+            rb.maxAngularVelocity = 100f; // Permitir m√°s rotaci√≥n
+            rb.sleepThreshold = 0.005f; // M√°s sensible
 
-            // VERIFICAR COLLIDER
             if (collider != null)
             {
                 collider.enabled = true;
                 collider.isTrigger = false;
-                collider.center = centroColliderBolo;
-                collider.size = tamaÒoColliderBolo;
+
+                // Asegurar collider convexo
+                if (collider is MeshCollider meshCollider)
+                {
+                    meshCollider.convex = true;
+                }
             }
 
             bolosRb.Add(rb);
@@ -207,17 +230,14 @@ public class GameManager : MonoBehaviour
 
     void ActivarFisicaBolos()
     {
-        Debug.Log("?? ACTIVANDO FÕSICA DE BOLOS...");
+        Debug.Log("ACTIVANDO F√çSICA DE BOLOS...");
 
         int boloIndex = 0;
         foreach (Rigidbody rb in bolosRb)
         {
             if (rb != null)
             {
-                // ? SOLO cambiar a no-kinematic - NO manipular velocidades en kinematic
                 rb.isKinematic = false;
-
-                // Activar con delay escalonado
                 float delay = 0.02f * boloIndex;
                 StartCoroutine(ActivarBoloIndividual(rb, delay));
                 boloIndex++;
@@ -232,47 +252,23 @@ public class GameManager : MonoBehaviour
 
         if (rb == null) yield break;
 
-        // ? Solo asegurar que est· despierto
         rb.WakeUp();
 
-        // Notificar al BoloController
         BoloController controller = rb.GetComponent<BoloController>();
         if (controller != null)
         {
             controller.OnBoloActivado();
         }
-
-        Debug.Log($"? Bolo {rb.name} activado - PosY: {rb.position.y:F3}");
-    }
-
-    IEnumerator HabilitarDeteccionConRetraso()
-    {
-        yield return new WaitForSeconds(0.5f);
-        Debug.Log("?? DetecciÛn de bolos habilitada");
     }
 
     public void BoloDerribado()
     {
-        // ? DOBLE PROTECCI”N CONTRA DUPLICADOS
         if (bolosDerribados < totalBolos)
         {
             bolosDerribados++;
             ActualizarPuntuacion();
-            Debug.Log($"?? BoloDerribado - Total: {bolosDerribados}/{totalBolos}");
-
-            // ? OPCI”N: PequeÒo delay para prevenir m˙ltiples llamadas r·pidas
-            StartCoroutine(PrevenirDuplicadosRapidos());
+            Debug.Log($"BoloDerribado - Total: {bolosDerribados}/{totalBolos}");
         }
-        else
-        {
-            Debug.LogWarning($"?? Intento de conteo duplicado - Ya hay {totalBolos} bolos");
-        }
-    }
-
-    IEnumerator PrevenirDuplicadosRapidos()
-    {
-        // Temporalmente deshabilitar conteo por 0.1 segundos
-        yield return new WaitForSeconds(0.1f);
     }
 
     void ActualizarPuntuacion()
@@ -287,37 +283,80 @@ public class GameManager : MonoBehaviour
     {
         int nuevosDerribados = 0;
 
-        foreach (var bolo in bolos)
+        foreach (var controller in boloControllers)
         {
-            if (bolo != null && bolo.activeInHierarchy)
+            if (controller != null && controller.FueDerribado)
             {
-                Rigidbody rb = bolo.GetComponent<Rigidbody>();
-                BoloController controller = bolo.GetComponent<BoloController>();
-
-                // ? SOLO contar bolos que han sido activados y tienen detecciÛn habilitada
-                if (rb != null && !rb.isKinematic && controller != null)
-                {
-                    // Usar criterios M¡S ESTRICTOS
-                    float productoPunto = Vector3.Dot(bolo.transform.up, Vector3.up);
-                    bool estaCaido = productoPunto < 0.3f;
-                    bool estaEnElSuelo = bolo.transform.position.y < 0.15f;
-                    bool seMueve = rb.linearVelocity.magnitude > 0.5f;
-
-                    // ? REQUERIR m˙ltiples condiciones
-                    if (estaEnElSuelo && seMueve && Time.time > 3.0f) // Esperar 3 segundos
-                    {
-                        nuevosDerribados++;
-                    }
-                }
+                nuevosDerribados++;
             }
         }
 
-        // ? SOLO actualizar si es un n˙mero v·lido
-        if (nuevosDerribados > bolosDerribados && nuevosDerribados <= totalBolos)
+        if (nuevosDerribados > bolosDerribados)
         {
             bolosDerribados = nuevosDerribados;
             ActualizarPuntuacion();
-            Debug.Log($"?? Bolos derribados REALES: {bolosDerribados}/{totalBolos}");
+        }
+    }
+
+    void VerificarDetencionBola()
+    {
+        if (estadoActual != EstadoJuego.Lanzada || detencionProcesada) return;
+
+        bool bolaQuieta = bolaRb.linearVelocity.magnitude < 0.1f &&
+                         bolaRb.angularVelocity.magnitude < 0.1f;
+
+        if (bolaQuieta)
+        {
+            tiempoBolaQuieta += Time.deltaTime;
+
+            if (tiempoBolaQuieta >= tiempoDetencionParaPanel)
+            {
+                MostrarPanelFinal();
+            }
+        }
+        else
+        {
+            tiempoBolaQuieta = 0f;
+        }
+    }
+
+    void MostrarPanelFinal()
+    {
+        if (detencionProcesada) return;
+
+        detencionProcesada = true;
+        Debug.Log("Mostrando panel final - Bola detenida");
+
+        if (panelFinal != null)
+        {
+            panelFinal.gameObject.SetActive(true);
+
+            TextMeshProUGUI textoPanel = panelFinal.GetComponentInChildren<TextMeshProUGUI>();
+            if (textoPanel != null)
+            {
+                textoPanel.text = $"¬°Turno terminado!\nPuntuaci√≥n: {bolosDerribados}/{totalBolos}";
+            }
+        }
+
+        estadoActual = EstadoJuego.Finalizado;
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other == colliderDetectorBola && other.gameObject == bola)
+        {
+            bolaEnZonaDetencion = true;
+            Debug.Log("Bola entr√≥ en zona de detecci√≥n");
+        }
+    }
+
+    void OnTriggerExit(Collider other)
+    {
+        if (other == colliderDetectorBola && other.gameObject == bola)
+        {
+            bolaEnZonaDetencion = false;
+            tiempoBolaQuieta = 0f;
+            Debug.Log("Bola sali√≥ de zona de detecci√≥n");
         }
     }
 
@@ -334,9 +373,9 @@ public class GameManager : MonoBehaviour
         ballCamera.gameObject.SetActive(false);
 
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(false);
-        if (textoInstrucciones != null) textoInstrucciones.text = "Arrastra hacia ATR¡S para cargar. Suelta para lanzar";
+        if (textoInstrucciones != null) textoInstrucciones.text = "Arrastra hacia ATR√ÅS para cargar. Suelta para lanzar";
 
-        Debug.Log("?? BotÛn Lanzar clickeado - Cambiando a fase de carga");
+        Debug.Log("Bot√≥n Lanzar clickeado - Cambiando a fase de carga");
     }
 
     void Update()
@@ -355,6 +394,11 @@ public class GameManager : MonoBehaviour
         {
             VerificarBolosPorAngulo();
             SeguirBolaConCamara();
+
+            if (bolaEnZonaDetencion)
+            {
+                VerificarDetencionBola();
+            }
         }
     }
 
@@ -363,9 +407,9 @@ public class GameManager : MonoBehaviour
         if (ballCamera != null && ballCamera.gameObject.activeSelf && bola != null)
         {
             Vector3 posicionCamara = ballCamera.transform.position;
-            float nuevaZ = bola.transform.position.z + offsetZC·mara;
+            float nuevaZ = bola.transform.position.z + offsetZC√°mara;
             nuevaZ = Mathf.Min(nuevaZ, 17f);
-            posicionCamara.z = Mathf.Lerp(posicionCamara.z, nuevaZ, suavizadoC·mara * Time.deltaTime);
+            posicionCamara.z = Mathf.Lerp(posicionCamara.z, nuevaZ, suavizadoC√°mara * Time.deltaTime);
             ballCamera.transform.position = posicionCamara;
         }
     }
@@ -445,7 +489,7 @@ public class GameManager : MonoBehaviour
         float distanciaCargada = Mathf.Abs(bola.transform.position.z - lanzadorAnchor.transform.position.z);
         float fuerza = Mathf.Lerp(fuerzaMinima, fuerzaMaxima, distanciaCargada);
 
-        Debug.Log($"?? LANZANDO BOLA - Fuerza: {fuerza}, Carga: {distanciaCargada}");
+        Debug.Log($"LANZANDO BOLA - Fuerza: {fuerza}, Carga: {distanciaCargada}");
 
         bolaRb.isKinematic = false;
         Vector3 direccionFuerza = Vector3.forward;
@@ -479,10 +523,9 @@ public class GameManager : MonoBehaviour
 
         yield return new WaitForSeconds(2f);
 
-        if (textoInstrucciones != null)
+        if (!detencionProcesada)
         {
-            textoInstrucciones.gameObject.SetActive(true);
-            textoInstrucciones.text = $"°Juego terminado! PuntuaciÛn: {bolosDerribados}/{totalBolos}";
+            MostrarPanelFinal();
         }
 
         yield return new WaitForSeconds(3f);

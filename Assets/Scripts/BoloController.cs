@@ -1,4 +1,3 @@
-using System.Xml.Linq;
 using UnityEngine;
 
 public class BoloController : MonoBehaviour
@@ -9,61 +8,98 @@ public class BoloController : MonoBehaviour
     private bool deteccionHabilitada = false;
     private float tiempoActivacion;
     private float ultimaColisionTiempo = 0f;
-    private const float tiempoMinimoEntreColisiones = 0.5f; // Medio segundo entre detecciones
+    private const float tiempoMinimoEntreColisiones = 0.5f;
+
+    public bool FueDerribado => yaContado;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        gameManager = FindAnyObjectByType<GameManager>();
+        gameManager = FindFirstObjectByType<GameManager>();
         deteccionHabilitada = false;
+
+        // Aseguramos detecci贸n continua para evitar que atraviesen el suelo a alta velocidad
+        if (rb != null) rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
     }
 
     void Update()
     {
+        // Si ya fue contado, NO hacemos return, solo dejamos de verificar si se cay贸.
+        // Pero permitimos que la f铆sica siga su curso.
+        if (yaContado) return;
+
         if (!deteccionHabilitada && rb != null && !rb.isKinematic)
         {
             if (Time.time - tiempoActivacion > 2.0f)
             {
                 deteccionHabilitada = true;
-                Debug.Log($"?? Bolo {name} - Detecci髇 habilitada");
             }
             return;
         }
 
-        if (!yaContado && deteccionHabilitada && rb != null && !rb.isKinematic)
+        if (deteccionHabilitada && rb != null && !rb.isKinematic)
         {
-            // Sistema de detecci髇 por 醤gulo/posici髇 (opcional)
-            float productoPunto = Vector3.Dot(transform.up, Vector3.up);
-            bool estaCaido = productoPunto < 0.3f;
-            bool estaEnElSuelo = transform.position.y < 0.15f;
-            bool seEstaMoviendo = rb.linearVelocity.magnitude > 0.5f;
+            VerificarSiEstaDerribado();
+        }
+    }
 
-            if (estaEnElSuelo && seEstaMoviendo && Time.time - ultimaColisionTiempo > tiempoMinimoEntreColisiones)
-            {
-                Debug.Log($"?? Bolo {name} detectado por posici髇");
-                MarcarComoDerribado();
-            }
+    void VerificarSiEstaDerribado()
+    {
+        float productoPunto = Vector3.Dot(transform.up, Vector3.up);
+        bool estaInclinado = productoPunto < 0.5f;
+
+        bool estaEnElSuelo = transform.position.y < 0.2f;
+        bool seEstaMoviendo = rb.linearVelocity.magnitude > 0.1f;
+
+        if (estaInclinado && Time.time - tiempoActivacion > 1.0f)
+        {
+            MarcarComoDerribado();
+            return;
+        }
+
+        if (estaEnElSuelo && seEstaMoviendo && Time.time - ultimaColisionTiempo > tiempoMinimoEntreColisiones)
+        {
+            MarcarComoDerribado();
+            return;
         }
     }
 
     void OnCollisionEnter(Collision collision)
     {
-        if (!yaContado && deteccionHabilitada && rb != null && !rb.isKinematic)
-        {
-            Debug.Log($"?? COLISI覰 - Bolo: {name}, Con: {collision.gameObject.name}, Fuerza: {collision.relativeVelocity.magnitude:F2}");
+        // Aunque ya est茅 contado, permitimos colisiones f铆sicas, 
+        // pero la l贸gica de puntuaci贸n se detiene gracias al if(yaContado) en MarcarComoDerribado.
 
-            if (Time.time - ultimaColisionTiempo < tiempoMinimoEntreColisiones)
+        if (!deteccionHabilitada && rb != null && !rb.isKinematic)
+        {
+            if (collision.relativeVelocity.magnitude > 3.0f)
             {
-                Debug.Log($"? COLISI覰 IGNORADA - Demasiado pronto");
-                return;
+                deteccionHabilitada = true;
             }
+        }
+
+        if (deteccionHabilitada && rb != null && !rb.isKinematic)
+        {
+            if (Time.time - ultimaColisionTiempo < tiempoMinimoEntreColisiones) return;
 
             if (collision.relativeVelocity.magnitude > 3.0f)
             {
                 ultimaColisionTiempo = Time.time;
-                Debug.Log($"?? COLISI覰 ACEPTADA");
                 MarcarComoDerribado();
             }
+            else
+            {
+                ultimaColisionTiempo = Time.time;
+            }
+        }
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (yaContado) return;
+
+        if ((other.gameObject.CompareTag("FueraPista") || other == gameManager?.colliderFueraPista))
+        {
+            MarcarComoDerribado();
         }
     }
 
@@ -74,24 +110,24 @@ public class BoloController : MonoBehaviour
 
     private void MarcarComoDerribado()
     {
-        if (!yaContado)
+        // Esta comprobaci贸n evita que se sumen puntos infinitos
+        if (!yaContado && gameManager != null)
         {
             yaContado = true;
-            Debug.Log($"? BLO {gameObject.name} MARCADO CORRECTAMENTE");
 
-            // ? DESACTIVAR M罶 COMPONENTES PARA PREVENIR DETECCI覰 FUTURA
-            if (TryGetComponent<Collider>(out var collider))
-            {
-                collider.enabled = false;
-            }
+            // --- CAMBIO IMPORTANTE ---
+            // ELIMINADA la l铆nea: collider.enabled = false;
+            // Esto asegura que el bolo siga chocando con el suelo y otros bolos.
 
-            // ? Cambiar layer para evitar m醩 colisiones
+            // Opcional: Cambiamos la layer para que Raycasts (como el del rat贸n) lo ignoren, 
+            // pero la f铆sica sigue actuando.
             gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
 
-            if (gameManager != null)
-            {
-                gameManager.BoloDerribado();
-            }
+            gameManager.BoloDerribado();
+            Debug.Log($"Bolo {name} marcado como derribado.");
         }
     }
+
+    // FixedUpdate eliminado ya que la amortiguaci贸n manual pod铆a causar 
+    // comportamientos extra帽os con la f铆sica de Unity.
 }
