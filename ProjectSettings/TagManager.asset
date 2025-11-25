@@ -6,6 +6,9 @@ TagManager:
   tags:
   - Camera
   - Bolo
+  - FueraPista
+  - Bola
+  - Ground
   layers:
   - Default
   - TransparentFX

@@ -3,93 +3,57 @@ using UnityEngine;
 public class BoloController : MonoBehaviour
 {
     private GameManager gameManager;
-    private bool yaContado = false;
     private Rigidbody rb;
+
+    // ESTADO
+    private bool yaContado = false; // "Cerrojo" interno
+
+    // --- ESTA ES LA LÍNEA QUE FALTABA PARA QUE GAMEMANAGER NO DE ERROR ---
+    public bool FueDerribado => yaContado;
+    // --------------------------------------------------------------------
+
     private bool deteccionHabilitada = false;
     private float tiempoActivacion;
-    private float ultimaColisionTiempo = 0f;
-    private const float tiempoMinimoEntreColisiones = 0.5f;
-
-    public bool FueDerribado => yaContado;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         gameManager = FindFirstObjectByType<GameManager>();
-        deteccionHabilitada = false;
 
-        // Aseguramos detección continua para evitar que atraviesen el suelo a alta velocidad
-        if (rb != null) rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        if (rb != null)
+        {
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        }
+    }
+
+    public void OnBoloActivado()
+    {
+        tiempoActivacion = Time.time;
+        Invoke(nameof(HabilitarDeteccion), 0.5f);
+    }
+
+    void HabilitarDeteccion()
+    {
+        deteccionHabilitada = true;
     }
 
     void Update()
     {
-        // Si ya fue contado, NO hacemos return, solo dejamos de verificar si se cayó.
-        // Pero permitimos que la física siga su curso.
         if (yaContado) return;
 
-        if (!deteccionHabilitada && rb != null && !rb.isKinematic)
-        {
-            if (Time.time - tiempoActivacion > 2.0f)
-            {
-                deteccionHabilitada = true;
-            }
-            return;
-        }
+        if (!deteccionHabilitada || rb == null || rb.isKinematic) return;
 
-        if (deteccionHabilitada && rb != null && !rb.isKinematic)
-        {
-            VerificarSiEstaDerribado();
-        }
+        VerificarInclinacion();
     }
 
-    void VerificarSiEstaDerribado()
+    void VerificarInclinacion()
     {
-        float productoPunto = Vector3.Dot(transform.up, Vector3.up);
-        bool estaInclinado = productoPunto < 0.5f;
+        // 0.707f equivale a 45 grados
+        float inclinacion = Vector3.Dot(Vector3.up, transform.up);
 
-        bool estaEnElSuelo = transform.position.y < 0.2f;
-        bool seEstaMoviendo = rb.linearVelocity.magnitude > 0.1f;
-
-        if (estaInclinado && Time.time - tiempoActivacion > 1.0f)
+        if (inclinacion < 0.707f)
         {
-            MarcarComoDerribado();
-            return;
-        }
-
-        if (estaEnElSuelo && seEstaMoviendo && Time.time - ultimaColisionTiempo > tiempoMinimoEntreColisiones)
-        {
-            MarcarComoDerribado();
-            return;
-        }
-    }
-
-    void OnCollisionEnter(Collision collision)
-    {
-        // Aunque ya esté contado, permitimos colisiones físicas, 
-        // pero la lógica de puntuación se detiene gracias al if(yaContado) en MarcarComoDerribado.
-
-        if (!deteccionHabilitada && rb != null && !rb.isKinematic)
-        {
-            if (collision.relativeVelocity.magnitude > 3.0f)
-            {
-                deteccionHabilitada = true;
-            }
-        }
-
-        if (deteccionHabilitada && rb != null && !rb.isKinematic)
-        {
-            if (Time.time - ultimaColisionTiempo < tiempoMinimoEntreColisiones) return;
-
-            if (collision.relativeVelocity.magnitude > 3.0f)
-            {
-                ultimaColisionTiempo = Time.time;
-                MarcarComoDerribado();
-            }
-            else
-            {
-                ultimaColisionTiempo = Time.time;
-            }
+            RegistrarCaida("Por Inclinación (> 45º)");
         }
     }
 
@@ -97,37 +61,26 @@ public class BoloController : MonoBehaviour
     {
         if (yaContado) return;
 
-        if ((other.gameObject.CompareTag("FueraPista") || other == gameManager?.colliderFueraPista))
+        // Verifica si choca con el suelo "Fuera de Pista" definido en GameManager
+        if (gameManager != null && other == gameManager.colliderFueraPista)
         {
-            MarcarComoDerribado();
+            RegistrarCaida("Por Salida de Pista");
         }
     }
 
-    public void OnBoloActivado()
+    private void RegistrarCaida(string motivo)
     {
-        tiempoActivacion = Time.time;
-    }
+        if (yaContado) return;
 
-    private void MarcarComoDerribado()
-    {
-        // Esta comprobación evita que se sumen puntos infinitos
-        if (!yaContado && gameManager != null)
+        yaContado = true; // Bloqueamos para que no cuente dos veces
+
+        Debug.Log($"Bolo derribado! Motivo: {motivo}");
+
+        if (gameManager != null)
         {
-            yaContado = true;
-
-            // --- CAMBIO IMPORTANTE ---
-            // ELIMINADA la línea: collider.enabled = false;
-            // Esto asegura que el bolo siga chocando con el suelo y otros bolos.
-
-            // Opcional: Cambiamos la layer para que Raycasts (como el del ratón) lo ignoren, 
-            // pero la física sigue actuando.
-            gameObject.layer = LayerMask.NameToLayer("Ignore Raycast");
-
             gameManager.BoloDerribado();
-            Debug.Log($"Bolo {name} marcado como derribado.");
         }
-    }
 
-    // FixedUpdate eliminado ya que la amortiguación manual podía causar 
-    // comportamientos extraños con la física de Unity.
+        // No desactivamos el collider para mantener la física realista
+    }
 }
