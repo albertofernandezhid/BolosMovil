@@ -13,10 +13,10 @@ GameObject:
   - component: {fileID: 8194194338386215687}
   - component: {fileID: 2470937717620925865}
   - component: {fileID: 8363545088856321356}
-  - component: {fileID: 3658323232009652164}
   - component: {fileID: 3724027528806742138}
   - component: {fileID: 1283553734460832779}
-  - component: {fileID: 6367453610254582501}
+  - component: {fileID: 1176073028766729776}
+  - component: {fileID: 3810653684030207057}
   m_Layer: 0
   m_Name: NewBola
   m_TagString: Untagged
@@ -34075,28 +34075,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8476765891953439067}
   m_Mesh: {fileID: 0}
---- !u!64 &3658323232009652164
-MeshCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8476765891953439067}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 0
-  serializedVersion: 5
-  m_Convex: 1
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 0}
 --- !u!54 &3724027528806742138
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -34145,7 +34123,7 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.13
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &6367453610254582501
+--- !u!114 &1176073028766729776
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -34154,6 +34132,31 @@ MonoBehaviour:
   m_GameObject: {fileID: 8476765891953439067}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a96cd6239ff9c0f448776a077b8c87fa, type: 3}
+  m_Script: {fileID: 11500000, guid: 4d565ba8d454b274bb872201be65fb57, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameManager: {fileID: 0}
+  lanzadorAnchor: {fileID: 0}
+  topCamera: {fileID: 0}
+  preLaunchCamera: {fileID: 0}
+  fuerzaMinima: 8
+  fuerzaMaxima: 15
+--- !u!114 &3810653684030207057
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8476765891953439067}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad9fe5be0fc760f41a59eef049619d89, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  velocidadMaxEstabilidad: 30
+  velocidadMaxDrift: 4
+  driftFuerzaBase: 0.8
+  deadZoneX: 0.25
+  maxAngularDrag: 0.8
+  minAngularDrag: 0.1
+  barrerasLaterales: {fileID: 0}

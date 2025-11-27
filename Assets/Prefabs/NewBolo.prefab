@@ -100,7 +100,6 @@ GameObject:
   - component: {fileID: 5497260988064549269}
   - component: {fileID: 2426241217807539609}
   - component: {fileID: 8903149429880837689}
-  - component: {fileID: 3674767440547667671}
   - component: {fileID: 9204601846895780940}
   - component: {fileID: 6825803823633115151}
   m_Layer: 0
@@ -1448,18 +1447,6 @@ MeshCollider:
   m_Convex: 1
   m_CookingOptions: 30
   m_Mesh: {fileID: 0}
---- !u!114 &3674767440547667671
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3891639163816702879}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 12f60b200f2a6c14193c00e17b1e9a8b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &9204601846895780940
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1469,14 +1456,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 3891639163816702879}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d9d448ebbcee70642a22fb8e163074a2, type: 3}
+  m_Script: {fileID: 11500000, guid: 82e4f1006abf7434cbe34ee41cfafec8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  color: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  size: 0.075
-  mostrarEnEditor: 1
-  mostrarEnRuntime: 1
-  mostrarLinea: 1
+  umbralInclinacion: 0.707
 --- !u!54 &6825803823633115151
 Rigidbody:
   m_ObjectHideFlags: 0

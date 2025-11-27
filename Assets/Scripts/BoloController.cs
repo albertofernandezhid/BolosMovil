@@ -4,31 +4,24 @@ public class BoloController : MonoBehaviour
 {
     private GameManager gameManager;
     private Rigidbody rb;
-
-    // ESTADO
-    private bool yaContado = false; // "Cerrojo" interno
-
-    // --- ESTA ES LA LÃNEA QUE FALTABA PARA QUE GAMEMANAGER NO DE ERROR ---
-    public bool FueDerribado => yaContado;
-    // --------------------------------------------------------------------
-
+    private bool yaContado = false;
     private bool deteccionHabilitada = false;
-    private float tiempoActivacion;
 
-    void Start()
+    // Constante para la detección de inclinación
+    public float umbralInclinacion = 0.707f; // Equivalente a 45 grados
+
+    public bool FueDerribado => yaContado;
+
+    // Función de inicialización llamada desde PinManager
+    public void Inicializar(GameManager gm)
     {
+        gameManager = gm;
         rb = GetComponent<Rigidbody>();
-        gameManager = FindFirstObjectByType<GameManager>();
-
-        if (rb != null)
-        {
-            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        }
     }
 
     public void OnBoloActivado()
     {
-        tiempoActivacion = Time.time;
+        // Habilita la detección después de un breve periodo para evitar caídas iniciales
         Invoke(nameof(HabilitarDeteccion), 0.5f);
     }
 
@@ -37,23 +30,18 @@ public class BoloController : MonoBehaviour
         deteccionHabilitada = true;
     }
 
-    void Update()
+    // Llamado por PinManager
+    public void VerificarInclinacion()
     {
         if (yaContado) return;
 
         if (!deteccionHabilitada || rb == null || rb.isKinematic) return;
 
-        VerificarInclinacion();
-    }
-
-    void VerificarInclinacion()
-    {
-        // 0.707f equivale a 45 grados
         float inclinacion = Vector3.Dot(Vector3.up, transform.up);
 
-        if (inclinacion < 0.707f)
+        if (inclinacion < umbralInclinacion)
         {
-            RegistrarCaida("Por InclinaciÃ³n (> 45Âº)");
+            RegistrarCaida("Por Inclinación (> " + (90 - Mathf.Acos(umbralInclinacion) * Mathf.Rad2Deg).ToString("F0") + "º)");
         }
     }
 
@@ -61,7 +49,7 @@ public class BoloController : MonoBehaviour
     {
         if (yaContado) return;
 
-        // Verifica si choca con el suelo "Fuera de Pista" definido en GameManager
+        // Verifica si choca con el suelo "Fuera de Pista"
         if (gameManager != null && other == gameManager.colliderFueraPista)
         {
             RegistrarCaida("Por Salida de Pista");
@@ -72,15 +60,11 @@ public class BoloController : MonoBehaviour
     {
         if (yaContado) return;
 
-        yaContado = true; // Bloqueamos para que no cuente dos veces
-
-        Debug.Log($"Bolo derribado! Motivo: {motivo}");
+        yaContado = true;
 
         if (gameManager != null)
         {
             gameManager.BoloDerribado();
         }
-
-        // No desactivamos el collider para mantener la fÃ­sica realista
     }
 }
