@@ -9,6 +9,7 @@ TagManager:
   - FueraPista
   - Bola
   - Ground
+  - Barreras
   layers:
   - Default
   - TransparentFX

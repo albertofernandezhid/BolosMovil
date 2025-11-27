@@ -9,8 +9,8 @@ public class GameManager : MonoBehaviour
     [Header("REFERENCIAS A SCRIPTS")]
     public GameObject bola;
     public PinManager pinManager;
-    public BallLauncher ballLauncher;
-    public BallPhysicsController ballPhysics;
+    public BallLauncher ballLauncher; // Solo para coordinación de alto nivel
+    public BallPhysicsController ballPhysics; // Se mantiene, pero ya no para ToggleBarreras
 
     [Header("CÁMARAS")]
     public Camera topCamera;
@@ -22,7 +22,7 @@ public class GameManager : MonoBehaviour
     [Header("UI")]
     public Button botonLanzar;
     public Button botonToggleBarreras;
-    public Button botonReiniciar;
+    public Button botonReiniciar; // Siempre visible
     public TextMeshProUGUI textoInstrucciones;
     public TextMeshProUGUI textoPuntuacion;
     public Canvas panelFinal;
@@ -32,6 +32,13 @@ public class GameManager : MonoBehaviour
     public BoxCollider colliderFueraPista;
     public float tiempoDetencionParaPanel = 2f;
     public float umbralVelocidadBola = 0.1f;
+
+    [Header("CONTROL DE BARRERAS")]
+    public GameObject barrerasLaterales; // ¡MOVIDO AQUÍ!
+
+    // Propiedad pública para que BallPhysicsController pueda verificar el estado
+    private bool usarBarreras = false;
+    public bool UsarBarreras => usarBarreras; // Propiedad de solo lectura
 
     private Rigidbody bolaRb;
     private int bolosDerribados = 0;
@@ -55,7 +62,15 @@ public class GameManager : MonoBehaviour
             if (bolaRb != null)
             {
                 bolaRb.isKinematic = true;
+                bolaRb.interpolation = RigidbodyInterpolation.Interpolate;
             }
+        }
+
+        // Inicialización de barreras al inicio
+        if (barrerasLaterales != null)
+        {
+            // El objeto se desactiva si usarBarreras es false (por defecto)
+            barrerasLaterales.SetActive(usarBarreras);
         }
 
         if (botonLanzar != null)
@@ -63,17 +78,20 @@ public class GameManager : MonoBehaviour
             botonLanzar.onClick.RemoveAllListeners();
             botonLanzar.onClick.AddListener(OnBotonLanzarClick);
         }
-        if (botonToggleBarreras != null && ballPhysics != null)
+
+        // CORRECCIÓN: Enlace del botón de Barreras a ToggleBarreras() de GameManager
+        if (botonToggleBarreras != null)
         {
             botonToggleBarreras.onClick.RemoveAllListeners();
-            botonToggleBarreras.onClick.AddListener(ballPhysics.ToggleBarreras);
+            botonToggleBarreras.onClick.AddListener(ToggleBarreras);
         }
 
+        // Enlace y visibilidad inicial del botón Reiniciar
         if (botonReiniciar != null)
         {
             botonReiniciar.onClick.RemoveAllListeners();
             botonReiniciar.onClick.AddListener(ReiniciarJuego);
-            botonReiniciar.gameObject.SetActive(false);
+            botonReiniciar.gameObject.SetActive(true);
         }
 
         IniciarJuego();
@@ -84,7 +102,6 @@ public class GameManager : MonoBehaviour
         if (estadoActual == EstadoJuego.Lanzada)
         {
             pinManager.VerificarBolosPorAngulo(this);
-            SeguirBolaConCamara();
 
             if (bolaEnZonaDetencion)
             {
@@ -93,10 +110,34 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Se llama después de que Update se haya ejecutado en todos los scripts.
+    /// Garantiza un seguimiento suave de la cámara después de los cálculos de física (FixedUpdate).
+    /// </summary>
+    void LateUpdate()
+    {
+        if (estadoActual == EstadoJuego.Lanzada)
+        {
+            SeguirBolaConCamara();
+        }
+    }
+
+    // --- LÓGICA DE BARRERAS (MOVIDA AQUÍ) ---
+    public void ToggleBarreras()
+    {
+        usarBarreras = !usarBarreras;
+        if (barrerasLaterales != null)
+        {
+            barrerasLaterales.SetActive(usarBarreras);
+            Debug.Log($"Barreras laterales: {(usarBarreras ? "ACTIVADAS" : "DESACTIVADAS")}");
+        }
+    }
+    // ----------------------------------------
+
     public void IniciarJuego()
     {
         if (pinManager != null) pinManager.ReiniciarBolos();
-        if (ballLauncher != null) ballLauncher.ResetearBola();
+        if (ballLauncher != null) ballLauncher.ResetearEIniciarPosicionamiento(topCamera, preLaunchCamera);
 
         bolosDerribados = 0;
         ActualizarPuntuacion();
@@ -108,7 +149,7 @@ public class GameManager : MonoBehaviour
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
         if (textoInstrucciones != null) textoInstrucciones.text = "Arrastra para mover horizontalmente";
         if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(true);
-        if (botonReiniciar != null) botonReiniciar.gameObject.SetActive(false);
+        if (botonReiniciar != null) botonReiniciar.gameObject.SetActive(true);
 
         topCamera.gameObject.SetActive(true);
         preLaunchCamera.gameObject.SetActive(false);
@@ -117,13 +158,19 @@ public class GameManager : MonoBehaviour
 
     public void OnBotonLanzarClick()
     {
-        if (ballLauncher != null) ballLauncher.FijarPosicionEIniciarCarga();
-
         estadoActual = EstadoJuego.Carga;
+        ballLauncher.IniciarFaseDeCarga();
 
         topCamera.gameObject.SetActive(false);
         preLaunchCamera.gameObject.SetActive(true);
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(false);
+    }
+
+    public void OnFaseCargaIniciada()
+    {
+        estadoActual = EstadoJuego.Carga;
+        if (textoInstrucciones != null)
+            textoInstrucciones.text = "Haz clic en la bola y arrastra hacia ATRÁS para cargar.";
     }
 
     public void OnBolaLanzada()
@@ -200,7 +247,7 @@ public class GameManager : MonoBehaviour
         if (detencionProcesada) return;
 
         bool bolaQuieta = bolaRb.linearVelocity.magnitude < umbralVelocidadBola &&
-                             bolaRb.angularVelocity.magnitude < umbralVelocidadBola;
+                            bolaRb.angularVelocity.magnitude < umbralVelocidadBola;
 
         if (bolaQuieta)
         {

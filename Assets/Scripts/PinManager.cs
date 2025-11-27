@@ -83,7 +83,7 @@ public class PinManager : MonoBehaviour
             rb.linearDamping = linearDampingBolo;
             rb.angularDamping = angularDampingBolo;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
-            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
             // Centro de masa
             rb.centerOfMass = centroMasaBolo;
