@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq; // Necesario para Linq
+using System.Linq;
 
 public class PinManager : MonoBehaviour
 {
@@ -9,14 +9,13 @@ public class PinManager : MonoBehaviour
     public GameManager gameManager;
     public GameObject boloPrefab;
 
-    [Header("AJUSTES FÍSICA - BOLOS")]
+    [Header("AJUSTES FISICA - BOLOS")]
     public float masaBolo = 2f;
     public float linearDampingBolo = 0.3f;
     public float angularDampingBolo = 0.1f;
-    [Tooltip("Coordenadas locales. Valores más positivos en Y = más inestables")]
     public Vector3 centroMasaBolo = new(0f, 0.4f, 0.1f);
 
-    [Header("CONFIGURACIÓN BOLOS - POSICIÓN")]
+    [Header("CONFIGURACION BOLOS - POSICION")]
     public Vector3[] posicionesBolos = new Vector3[10]
     {
         new(0f, 0.61f, 19f),
@@ -30,14 +29,14 @@ public class PinManager : MonoBehaviour
         new(0.2f, 0.61f, 19.9f),
         new(0.6f, 0.61f, 19.9f)
     };
-    public Vector3 rotacionInicialBolos = new Vector3(0f, 0f, 0f);
+    public Vector3 rotacionInicialBolos = new(0f, 0f, 0f);
 
-    // ESTADO INTERNO
     private readonly List<GameObject> bolos = new();
     private readonly List<Rigidbody> bolosRb = new();
     private readonly List<BoloController> boloControllers = new();
 
-    // --- REINICIO Y CREACIÓN ---
+    private readonly WaitForSeconds delayBoloActivation = new(0.1f);
+
     public void ReiniciarBolos()
     {
         foreach (var bolo in bolos)
@@ -55,100 +54,140 @@ public class PinManager : MonoBehaviour
     {
         for (int i = 0; i < posicionesBolos.Length; i++)
         {
-            GameObject boloObj = Instantiate(boloPrefab, posicionesBolos[i], Quaternion.Euler(rotacionInicialBolos));
-            boloObj.transform.localScale = Vector3.one;
+            GameObject boloObj = Instantiate(boloPrefab, posicionesBolos[i], Quaternion.Euler(rotacionInicialBolos), transform);
 
-            ConfigurarFisicaBolo(boloObj);
-            bolos.Add(boloObj);
-
+            Rigidbody rb = boloObj.GetComponent<Rigidbody>();
             BoloController controller = boloObj.GetComponent<BoloController>();
+
+            if (rb != null)
+            {
+                ConfigurarFisicaBolo(boloObj, rb);
+                bolosRb.Add(rb);
+            }
+
             if (controller != null)
             {
+                controller.Inicializar(gameManager, posicionesBolos[i]);
                 boloControllers.Add(controller);
-                controller.Inicializar(gameManager); // Asigna el GameManager
             }
+
+            bolos.Add(boloObj);
         }
-        // Inicialmente, están Kinematic. Se activan al lanzar la bola.
     }
 
-    void ConfigurarFisicaBolo(GameObject bolo)
+    void ConfigurarFisicaBolo(GameObject bolo, Rigidbody rb)
     {
-        Rigidbody rb = bolo.GetComponent<Rigidbody>();
         Collider collider = bolo.GetComponent<Collider>();
 
-        if (rb != null)
+        rb.isKinematic = true;
+        rb.mass = masaBolo;
+        rb.linearDamping = linearDampingBolo;
+        rb.angularDamping = angularDampingBolo;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+        rb.centerOfMass = centroMasaBolo;
+        rb.maxAngularVelocity = 100f;
+        rb.sleepThreshold = 0.005f;
+
+        if (collider != null && collider is MeshCollider meshCollider)
         {
-            rb.isKinematic = true; // Inicia desactivado
-            rb.mass = masaBolo;
-            rb.linearDamping = linearDampingBolo;
-            rb.angularDamping = angularDampingBolo;
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
-            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
-
-            // Centro de masa
-            rb.centerOfMass = centroMasaBolo;
-            rb.maxAngularVelocity = 100f;
-            rb.sleepThreshold = 0.005f;
-
-            if (collider != null && collider is MeshCollider meshCollider)
-            {
-                meshCollider.convex = true;
-            }
-
-            bolosRb.Add(rb);
+            meshCollider.convex = true;
         }
     }
 
-    // --- ACTIVACIÓN ---
+    public void EliminarBolosCaidos()
+    {
+        List<GameObject> bolosAEliminar = new();
+        List<BoloController> controllersAEliminar = new();
+        List<Rigidbody> rbsAEliminar = new();
+
+        foreach (var controller in boloControllers)
+        {
+            if (controller != null && controller.FueDerribado)
+            {
+                bolosAEliminar.Add(controller.gameObject);
+                controllersAEliminar.Add(controller);
+
+                // Obtener el Rigidbody del controlador. Se acepta GetComponent aquí 
+                // porque este método se llama una vez al final de la tirada.
+                Rigidbody rb = controller.GetComponent<Rigidbody>();
+                if (rb != null) rbsAEliminar.Add(rb);
+            }
+        }
+
+        foreach (var bolo in bolosAEliminar)
+        {
+            if (bolo != null) Destroy(bolo);
+        }
+
+        bolos.RemoveAll(bolosAEliminar.Contains);
+        boloControllers.RemoveAll(controllersAEliminar.Contains);
+        bolosRb.RemoveAll(rbsAEliminar.Contains);
+    }
+
     public void ActivarFisicaBolos()
     {
-        // Activamos la física con un pequeño retraso para evitar problemas de Start()
         StartCoroutine(ActivarBolosConRetraso());
     }
 
     IEnumerator ActivarBolosConRetraso()
     {
-        yield return new WaitForSeconds(0.1f);
+        yield return delayBoloActivation;
 
+        // CAMBIO: Iterar sobre la lista de controladores para acceder al objeto completo
         int boloIndex = 0;
-        foreach (Rigidbody rb in bolosRb)
+        foreach (BoloController controller in boloControllers)
         {
+            Rigidbody rb = controller.GetComponent<Rigidbody>(); // Asignación aceptable
             if (rb != null)
             {
                 rb.isKinematic = false;
-                // Pequeño delay escalado por bolo (opcional, para estabilidad)
                 float delay = 0.02f * boloIndex;
-                StartCoroutine(ActivarBoloIndividual(rb, delay));
+                // CAMBIO: Pasar el Rigidbody y el Controller para evitar GetComponent en el Coroutine
+                StartCoroutine(ActivarBoloIndividual(rb, controller, delay));
             }
             boloIndex++;
         }
     }
 
-    IEnumerator ActivarBoloIndividual(Rigidbody rb, float delay = 0f)
+    IEnumerator ActivarBoloIndividual(Rigidbody rb, BoloController controller, float delay = 0f) // <--- CAMBIO: Recibe el Controller
     {
         if (delay > 0f) yield return new WaitForSeconds(delay);
         if (rb == null) yield break;
 
         rb.WakeUp();
 
-        BoloController controller = rb.GetComponent<BoloController>();
+        // CAMBIO: Ya tenemos la referencia al controller, no necesitamos GetComponent
         if (controller != null)
         {
             controller.OnBoloActivado();
         }
     }
 
-    // --- DETECCIÓN DE CAÍDA ---
-    public void VerificarBolosPorAngulo(GameManager gm)
+    public void VerificarBolosPorAngulo()
     {
-        // Verifica todos los bolos para contar los derribados si aún no lo están
         foreach (var controller in boloControllers)
         {
             if (controller != null && !controller.FueDerribado)
             {
-                // Lógica de inclinación (debería estar en BoloController, pero el PinManager lo invoca)
-                controller.VerificarInclinacion();
+                controller.VerificarCaida();
             }
         }
+    }
+
+    public bool HayBolosMoviendose(float umbralVelocidad)
+    {
+        foreach (Rigidbody rb in bolosRb)
+        {
+            if (rb != null && rb.gameObject.activeSelf && !rb.isKinematic)
+            {
+                if (rb.linearVelocity.magnitude > umbralVelocidad || rb.angularVelocity.magnitude > umbralVelocidad)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

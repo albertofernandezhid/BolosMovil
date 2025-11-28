@@ -1,6 +1,6 @@
 using UnityEngine;
 using System.Collections;
-using TMPro; // Asegúrate de mantenerlo si se usa para el texto de instrucciones
+using TMPro; // Asegurate de mantenerlo si se usa para el texto de instrucciones
 
 [RequireComponent(typeof(Rigidbody))]
 public class BallLauncher : MonoBehaviour
@@ -17,7 +17,7 @@ public class BallLauncher : MonoBehaviour
     private float posicionXFijada = 0f;
     private Vector3 posicionInicialBola = new(0f, 0.54f, 0f);
 
-    // Cámaras temporales para la detección de Raycast
+    // Camaras temporales para la deteccion de Raycast
     private Camera camaraPosicionamiento;
     private Camera camaraCarga;
 
@@ -27,17 +27,27 @@ public class BallLauncher : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+        if (gameManager == null)
+        {
+            // Intentar buscar el GameManager si no esta asignado (Asumiendo que el usuario usa el nuevo GameManager)
+            gameManager = FindFirstObjectByType<GameManager>();
+        }
+
         if (gameManager == null) Debug.LogError("BallLauncher requiere la referencia a GameManager.");
     }
 
     public void ResetearEIniciarPosicionamiento(Camera topCam, Camera preLaunchCam)
     {
-        // 1. Resetear la posición y cinemática de la bola
+        // CORRECCION 1: Asegurar que las referencias a camaras se asignan en el momento que se llaman.
+        camaraPosicionamiento = topCam;
+        camaraCarga = preLaunchCam;
+
+        // 1. Resetear la posicion y cinematica de la bola
         if (rb == null) rb = GetComponent<Rigidbody>();
         if (rb == null) { Debug.LogError("Rigidbody no encontrado en la bola."); return; }
         if (lanzadorAnchor == null)
         {
-            Debug.LogError("ERROR NULO: lanzadorAnchor no está asignado en el Inspector.");
+            Debug.LogError("ERROR NULO: lanzadorAnchor no esta asignado en el Inspector.");
             return;
         }
 
@@ -45,11 +55,7 @@ public class BallLauncher : MonoBehaviour
         rb.isKinematic = true;
         lanzadorAnchor.transform.position = new Vector3(0, 0.585f, 0);
 
-        // 2. Establecer cámaras para la entrada de usuario
-        camaraPosicionamiento = topCam;
-        camaraCarga = preLaunchCam;
-
-        // 3. Iniciar el estado de posicionamiento
+        // 2. Iniciar el estado de posicionamiento
         estadoActual = EstadoLanzador.Posicionando;
     }
 
@@ -74,6 +80,9 @@ public class BallLauncher : MonoBehaviour
 
     void ManejarFasePosicionamiento()
     {
+        // CORRECCION 2: Comprobacion de Nulo antes de usar la camara
+        if (camaraPosicionamiento == null) return;
+
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = camaraPosicionamiento.ScreenPointToRay(Input.mousePosition);
@@ -86,6 +95,9 @@ public class BallLauncher : MonoBehaviour
 
     void ManejarFaseCarga()
     {
+        // CORRECCION 3 (LINEA 91): Comprobacion de Nulo antes de usar la camara
+        if (camaraCarga == null) return;
+
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = camaraCarga.ScreenPointToRay(Input.mousePosition);
@@ -99,6 +111,9 @@ public class BallLauncher : MonoBehaviour
 
     IEnumerator ArrastreHorizontal()
     {
+        // CORRECCION 4: Comprobacion de Nulo en el Coroutine
+        if (camaraPosicionamiento == null || lanzadorAnchor == null) yield break;
+
         while (Input.GetMouseButton(0))
         {
             Ray ray = camaraPosicionamiento.ScreenPointToRay(Input.mousePosition);
@@ -123,9 +138,12 @@ public class BallLauncher : MonoBehaviour
 
     IEnumerator ArrastreCarga()
     {
+        // CORRECCION 5: Comprobacion de Nulo en el Coroutine
+        if (camaraCarga == null || lanzadorAnchor == null || gameManager == null) yield break;
+
         // Se utiliza gameManager para acceder al texto de instrucciones de la UI
         if (gameManager.textoInstrucciones != null)
-            gameManager.textoInstrucciones.text = "Arrastra hacia ATRÁS para cargar. Suelta para lanzar";
+            gameManager.textoInstrucciones.text = "Arrastra hacia ATRAS para cargar. Suelta para lanzar";
 
         float inicioCargaZ = lanzadorAnchor.transform.position.z;
 
@@ -138,7 +156,7 @@ public class BallLauncher : MonoBehaviour
             {
                 Vector3 point = ray.GetPoint(distance);
 
-                // La lógica de carga queda totalmente contenida en BallLauncher
+                // La logica de carga queda totalmente contenida en BallLauncher
                 float carga = Mathf.Clamp(inicioCargaZ - point.z, 0f, 1f);
 
                 Vector3 posBola = lanzadorAnchor.transform.position;
@@ -157,6 +175,8 @@ public class BallLauncher : MonoBehaviour
 
     void LanzarBola()
     {
+        if (rb == null || gameManager == null) return;
+
         float distanciaCargada = Mathf.Abs(transform.position.z - lanzadorAnchor.transform.position.z);
         float fuerza = Mathf.Lerp(fuerzaMinima, fuerzaMaxima, distanciaCargada);
 
@@ -165,7 +185,7 @@ public class BallLauncher : MonoBehaviour
         rb.AddForce(direccionFuerza * fuerza, ForceMode.VelocityChange);
 
         if (gameManager.textoInstrucciones != null) gameManager.textoInstrucciones.gameObject.SetActive(false);
-        estadoActual = EstadoLanzador.Idle; // Ya no hay más interacción
+        estadoActual = EstadoLanzador.Idle; // Ya no hay mas interaccion
 
         // Notifica al GameManager que la bola ha sido lanzada
         gameManager.OnBolaLanzada();

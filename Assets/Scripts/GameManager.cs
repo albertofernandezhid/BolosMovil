@@ -9,53 +9,67 @@ public class GameManager : MonoBehaviour
     [Header("REFERENCIAS A SCRIPTS")]
     public GameObject bola;
     public PinManager pinManager;
-    public BallLauncher ballLauncher; // Solo para coordinación de alto nivel
-    public BallPhysicsController ballPhysics; // Se mantiene, pero ya no para ToggleBarreras
+    public BallLauncher ballLauncher;
+    public BallPhysicsController ballPhysics;
 
-    [Header("CÁMARAS")]
+    [Header("GESTION DE LA PARTIDA")]
+    public ScoreManager scoreManager;
+
+    [Header("CAMARAS")]
     public Camera topCamera;
     public Camera preLaunchCamera;
     public Camera ballCamera;
-    public float offsetZCámara = -2f;
-    public float suavizadoCámara = 5f;
+    public float offsetZCamara = -2f;
+    public float suavizadoCamara = 5f;
+
+    [Header("LOGICA DE FIN DE LANZAMIENTO")]
+    public float posicionZFinalCamara = 17f;
+    public float tiempoPausaEnFinal = 3f;
 
     [Header("UI")]
     public Button botonLanzar;
     public Button botonToggleBarreras;
-    public Button botonReiniciar; // Siempre visible
+    public Button botonReiniciar;
     public TextMeshProUGUI textoInstrucciones;
     public TextMeshProUGUI textoPuntuacion;
     public Canvas panelFinal;
+    public GameObject panelScoreGlobal;
 
-    [Header("LÓGICA DE DETECCIÓN")]
-    public BoxCollider colliderDetectorBola;
+    [Header("LOGICA DE DETECCION")]
     public BoxCollider colliderFueraPista;
+    public BoxCollider colliderFinalPista;
     public float tiempoDetencionParaPanel = 2f;
     public float umbralVelocidadBola = 0.1f;
+    public float tiempoEsperaConteoBolos = 1.0f;
 
     [Header("CONTROL DE BARRERAS")]
-    public GameObject barrerasLaterales; // ¡MOVIDO AQUÍ!
+    public GameObject barrerasLaterales;
 
-    // Propiedad pública para que BallPhysicsController pueda verificar el estado
     private bool usarBarreras = false;
-    public bool UsarBarreras => usarBarreras; // Propiedad de solo lectura
+    public bool UsarBarreras => usarBarreras;
 
     private Rigidbody bolaRb;
     private int bolosDerribados = 0;
     private const int TOTAL_BOLOS = 10;
-    private bool bolaEnZonaDetencion = false;
     private bool detencionProcesada = false;
     private float tiempoBolaQuieta = 0f;
 
-    private readonly WaitForSeconds waitHalfSecond = new(0.5f);
-    private readonly WaitForSeconds waitOneSecond = new(1f);
-    private readonly WaitForSeconds waitTwoSeconds = new(2f);
+    private bool bolaLlegoAlFinal = false;
+
+    private float tiempoEnFinalCamara = 0f;
 
     public enum EstadoJuego { Posicionamiento, Carga, Lanzada, Finalizado }
     private EstadoJuego estadoActual = EstadoJuego.Posicionamiento;
 
     void Start()
     {
+        Time.timeScale = 1f;
+
+        if (scoreManager == null)
+        {
+            scoreManager = FindFirstObjectByType<ScoreManager>();
+        }
+
         if (bola != null)
         {
             bolaRb = bola.GetComponent<Rigidbody>();
@@ -66,10 +80,8 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Inicialización de barreras al inicio
         if (barrerasLaterales != null)
         {
-            // El objeto se desactiva si usarBarreras es false (por defecto)
             barrerasLaterales.SetActive(usarBarreras);
         }
 
@@ -79,41 +91,51 @@ public class GameManager : MonoBehaviour
             botonLanzar.onClick.AddListener(OnBotonLanzarClick);
         }
 
-        // CORRECCIÓN: Enlace del botón de Barreras a ToggleBarreras() de GameManager
         if (botonToggleBarreras != null)
         {
             botonToggleBarreras.onClick.RemoveAllListeners();
             botonToggleBarreras.onClick.AddListener(ToggleBarreras);
         }
 
-        // Enlace y visibilidad inicial del botón Reiniciar
         if (botonReiniciar != null)
         {
             botonReiniciar.onClick.RemoveAllListeners();
             botonReiniciar.onClick.AddListener(ReiniciarJuego);
-            botonReiniciar.gameObject.SetActive(true);
+            botonReiniciar.gameObject.SetActive(false);
         }
 
-        IniciarJuego();
+        if (scoreManager != null)
+        {
+            scoreManager.IniciarPartidaMultijugador(1);
+        }
+        else
+        {
+            IniciarJuego();
+        }
     }
 
     void Update()
     {
         if (estadoActual == EstadoJuego.Lanzada)
         {
-            pinManager.VerificarBolosPorAngulo(this);
+            if (pinManager != null) pinManager.VerificarBolosPorAngulo();
 
-            if (bolaEnZonaDetencion)
+            if (bolaLlegoAlFinal)
             {
-                VerificarDetencionBola();
+                tiempoEnFinalCamara += Time.deltaTime;
+
+                if (tiempoEnFinalCamara >= tiempoPausaEnFinal)
+                {
+                    IniciarFinalizacionLanzamiento();
+                }
+            }
+            else if (bolaRb != null)
+            {
+                VerificarDetencionBolaPorVelocidad();
             }
         }
     }
 
-    /// <summary>
-    /// Se llama después de que Update se haya ejecutado en todos los scripts.
-    /// Garantiza un seguimiento suave de la cámara después de los cálculos de física (FixedUpdate).
-    /// </summary>
     void LateUpdate()
     {
         if (estadoActual == EstadoJuego.Lanzada)
@@ -122,44 +144,55 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // --- LÓGICA DE BARRERAS (MOVIDA AQUÍ) ---
     public void ToggleBarreras()
     {
         usarBarreras = !usarBarreras;
         if (barrerasLaterales != null)
         {
             barrerasLaterales.SetActive(usarBarreras);
-            Debug.Log($"Barreras laterales: {(usarBarreras ? "ACTIVADAS" : "DESACTIVADAS")}");
         }
     }
-    // ----------------------------------------
 
     public void IniciarJuego()
     {
         if (pinManager != null) pinManager.ReiniciarBolos();
+
+        if (bolaRb != null) bolaRb.isKinematic = true;
         if (ballLauncher != null) ballLauncher.ResetearEIniciarPosicionamiento(topCamera, preLaunchCamera);
 
         bolosDerribados = 0;
-        ActualizarPuntuacion();
-        detencionProcesada = false;
-        tiempoBolaQuieta = 0f;
+        ActualizarPuntuacionSimple();
+        ResetearVariablesDeDetencion();
         estadoActual = EstadoJuego.Posicionamiento;
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
+
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
         if (textoInstrucciones != null) textoInstrucciones.text = "Arrastra para mover horizontalmente";
         if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(true);
-        if (botonReiniciar != null) botonReiniciar.gameObject.SetActive(true);
+
+        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
 
         topCamera.gameObject.SetActive(true);
         preLaunchCamera.gameObject.SetActive(false);
         ballCamera.gameObject.SetActive(false);
     }
 
+    private void ResetearVariablesDeDetencion()
+    {
+        detencionProcesada = false;
+        tiempoBolaQuieta = 0f;
+        tiempoEnFinalCamara = 0f;
+        bolaLlegoAlFinal = false;
+    }
+
     public void OnBotonLanzarClick()
     {
         estadoActual = EstadoJuego.Carga;
-        ballLauncher.IniciarFaseDeCarga();
+        if (ballLauncher != null) ballLauncher.IniciarFaseDeCarga();
 
         topCamera.gameObject.SetActive(false);
         preLaunchCamera.gameObject.SetActive(true);
@@ -170,7 +203,7 @@ public class GameManager : MonoBehaviour
     {
         estadoActual = EstadoJuego.Carga;
         if (textoInstrucciones != null)
-            textoInstrucciones.text = "Haz clic en la bola y arrastra hacia ATRÁS para cargar.";
+            textoInstrucciones.text = "Haz clic en la bola y arrastra hacia ATRAS para cargar.";
     }
 
     public void OnBolaLanzada()
@@ -182,7 +215,9 @@ public class GameManager : MonoBehaviour
         ballCamera.gameObject.SetActive(true);
         if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(false);
 
-        StartCoroutine(VerificarFinJuegoLargo());
+        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(false);
+
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
     }
 
     public void BoloDerribado()
@@ -190,72 +225,25 @@ public class GameManager : MonoBehaviour
         if (bolosDerribados < TOTAL_BOLOS)
         {
             bolosDerribados++;
-            ActualizarPuntuacion();
         }
     }
 
-    void ActualizarPuntuacion()
-    {
-        if (textoPuntuacion != null)
-        {
-            textoPuntuacion.text = $"{bolosDerribados}/{TOTAL_BOLOS}";
-        }
-    }
-
-    void MostrarPanelFinal()
-    {
-        if (detencionProcesada) return;
-
-        detencionProcesada = true;
-        estadoActual = EstadoJuego.Finalizado;
-
-        if (panelFinal != null)
-        {
-            panelFinal.gameObject.SetActive(true);
-            TextMeshProUGUI textoPanel = panelFinal.GetComponentInChildren<TextMeshProUGUI>();
-            if (textoPanel != null)
-            {
-                textoPanel.text = $"¡Turno terminado!\nPuntuación: {bolosDerribados}/{TOTAL_BOLOS}";
-            }
-        }
-
-        if (botonReiniciar != null)
-        {
-            botonReiniciar.gameObject.SetActive(true);
-        }
-    }
-
-    public void ReiniciarJuego()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-
-    void SeguirBolaConCamara()
-    {
-        if (ballCamera != null && ballCamera.gameObject.activeSelf && bola != null)
-        {
-            Vector3 posicionCamara = ballCamera.transform.position;
-            float nuevaZ = bola.transform.position.z + offsetZCámara;
-            nuevaZ = Mathf.Min(nuevaZ, 17f);
-            posicionCamara.z = Mathf.Lerp(posicionCamara.z, nuevaZ, suavizadoCámara * Time.deltaTime);
-            ballCamera.transform.position = posicionCamara;
-        }
-    }
-
-    void VerificarDetencionBola()
+    void VerificarDetencionBolaPorVelocidad()
     {
         if (detencionProcesada) return;
 
         bool bolaQuieta = bolaRb.linearVelocity.magnitude < umbralVelocidadBola &&
-                            bolaRb.angularVelocity.magnitude < umbralVelocidadBola;
+                             bolaRb.angularVelocity.magnitude < umbralVelocidadBola;
 
-        if (bolaQuieta)
+        bool bolosActivos = pinManager != null && pinManager.HayBolosMoviendose(umbralVelocidadBola);
+
+        if (bolaQuieta && !bolosActivos)
         {
             tiempoBolaQuieta += Time.deltaTime;
 
             if (tiempoBolaQuieta >= tiempoDetencionParaPanel)
             {
-                MostrarPanelFinal();
+                IniciarFinalizacionLanzamiento();
             }
         }
         else
@@ -264,37 +252,189 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    IEnumerator VerificarFinJuegoLargo()
+    private void IniciarFinalizacionLanzamiento()
     {
-        yield return waitOneSecond;
+        if (detencionProcesada) return;
+        detencionProcesada = true;
+        StartCoroutine(ProcesarFinalizacionLanzamiento());
+    }
 
-        while (bola != null && estadoActual == EstadoJuego.Lanzada && bola.transform.position.z < 25f && bola.transform.position.y > -1f)
+    private IEnumerator ProcesarFinalizacionLanzamiento()
+    {
+        if (bolaRb != null)
         {
-            yield return waitHalfSecond;
+            bolaRb.linearVelocity = Vector3.zero;
+            bolaRb.angularVelocity = Vector3.zero;
+            bolaRb.isKinematic = true;
         }
 
-        yield return waitTwoSeconds;
+        yield return new WaitForSecondsRealtime(tiempoEsperaConteoBolos);
 
-        if (!detencionProcesada)
+        FinalizarLanzamientoYMostrarPanel();
+    }
+
+
+    void FinalizarLanzamientoYMostrarPanel()
+    {
+        estadoActual = EstadoJuego.Finalizado;
+
+        // La actualización de la puntuación ya se realiza en ScoreManager.MostrarPanelDeTurno
+
+        if (panelScoreGlobal != null)
         {
-            MostrarPanelFinal();
+            panelScoreGlobal.SetActive(true);
+        }
+
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
+
+        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(false);
+
+        if (panelFinal != null && scoreManager != null && scoreManager.jugadorActual != null)
+        {
+            panelFinal.gameObject.SetActive(true);
+            TextMeshProUGUI textoPanel = panelFinal.GetComponentInChildren<TextMeshProUGUI>();
+            if (textoPanel != null)
+            {
+                string nombreJugador = scoreManager.jugadorActual.nombre;
+                textoPanel.text = $"Turno terminado!\n{nombreJugador} derribo: {bolosDerribados} bolos.";
+            }
+        }
+
+        if (scoreManager != null)
+        {
+            scoreManager.MostrarPanelDeTurno(bolosDerribados);
+        }
+    }
+
+    public void ReiniciarRondaParaNuevoTurno(string mensajeInstruccion)
+    {
+        if (pinManager != null) pinManager.ReiniciarBolos();
+
+        if (bolaRb != null) bolaRb.isKinematic = true;
+        if (ballLauncher != null) ballLauncher.ResetearEIniciarPosicionamiento(topCamera, preLaunchCamera);
+
+        bolosDerribados = 0;
+        ResetearVariablesDeDetencion();
+        estadoActual = EstadoJuego.Posicionamiento;
+
+        if (textoInstrucciones != null)
+        {
+            textoInstrucciones.gameObject.SetActive(true);
+            textoInstrucciones.text = mensajeInstruccion;
+        }
+
+        if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
+        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
+
+        if (scoreManager != null)
+        {
+            scoreManager.ActualizarUIFrame(scoreManager.frameActual);
+        }
+
+        ActualizarPuntuacionSimple(); // Llama a la función para actualizar el texto
+
+        if (panelFinal != null) panelFinal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.gameObject.SetActive(false);
+
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
+
+        topCamera.gameObject.SetActive(true);
+        preLaunchCamera.gameObject.SetActive(false);
+        ballCamera.gameObject.SetActive(false);
+    }
+
+    public void PrepararSegundoLanzamiento(string mensajeInstruccion)
+    {
+        if (pinManager != null) pinManager.EliminarBolosCaidos();
+
+        if (bolaRb != null) bolaRb.isKinematic = true;
+        if (ballLauncher != null) ballLauncher.ResetearEIniciarPosicionamiento(topCamera, preLaunchCamera);
+
+        bolosDerribados = 0;
+        ResetearVariablesDeDetencion();
+        estadoActual = EstadoJuego.Posicionamiento;
+
+        if (textoInstrucciones != null)
+        {
+            textoInstrucciones.gameObject.SetActive(true);
+            textoInstrucciones.text = mensajeInstruccion;
+        }
+
+        if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
+        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
+
+        ActualizarPuntuacionSimple(); // Llama a la función para actualizar el texto
+
+        if (panelFinal != null) panelFinal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.gameObject.SetActive(false);
+
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
+
+        topCamera.gameObject.SetActive(true);
+        preLaunchCamera.gameObject.SetActive(false);
+        ballCamera.gameObject.SetActive(false);
+    }
+
+    void SeguirBolaConCamara()
+    {
+        if (ballCamera != null && ballCamera.gameObject.activeSelf && bola != null)
+        {
+            Vector3 posicionCamara = ballCamera.transform.position;
+            float nuevaZ = bola.transform.position.z + offsetZCamara;
+
+            nuevaZ = Mathf.Min(nuevaZ, posicionZFinalCamara);
+
+            posicionCamara.z = Mathf.Lerp(posicionCamara.z, nuevaZ, suavizadoCamara * Time.deltaTime);
+            ballCamera.transform.position = posicionCamara;
+        }
+    }
+
+    void ActualizarPuntuacionSimple()
+    {
+        if (textoPuntuacion != null && scoreManager != null && scoreManager.jugadorActual != null)
+        {
+            // Muestra el nombre del jugador y su puntuación total
+            textoPuntuacion.text = $"{scoreManager.jugadorActual.nombre} | Puntos: {scoreManager.jugadorActual.puntuacionTotal}";
         }
     }
 
     void OnTriggerEnter(Collider other)
     {
-        if (other == colliderDetectorBola && other.gameObject == bola)
+        if (other.CompareTag("FueraPista"))
         {
-            bolaEnZonaDetencion = true;
+            if (bola != null && bola.CompareTag("Bola") && other.GetComponent<Collider>().gameObject == colliderFueraPista.gameObject)
+            {
+                if (estadoActual == EstadoJuego.Lanzada && !detencionProcesada)
+                {
+                    bolaLlegoAlFinal = true;
+                    tiempoEnFinalCamara = 0f;
+
+                    if (bolaRb != null)
+                    {
+                        bolaRb.linearVelocity = Vector3.zero;
+                        bolaRb.angularVelocity = Vector3.zero;
+                        bolaRb.isKinematic = true;
+                    }
+                }
+            }
+        }
+
+        if (other.CompareTag("FinalPista"))
+        {
+            if (bola != null && bola.CompareTag("Bola") && other.GetComponent<Collider>().gameObject == colliderFinalPista.gameObject)
+            {
+                if (estadoActual == EstadoJuego.Lanzada && !detencionProcesada)
+                {
+                    bolaLlegoAlFinal = true;
+                    tiempoEnFinalCamara = 0f;
+                }
+            }
         }
     }
 
-    void OnTriggerExit(Collider other)
+    public void ReiniciarJuego()
     {
-        if (other == colliderDetectorBola && other.gameObject == bola)
-        {
-            bolaEnZonaDetencion = false;
-            tiempoBolaQuieta = 0f;
-        }
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }

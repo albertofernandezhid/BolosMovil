@@ -1,27 +1,34 @@
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody))] // <--- AÑADIDO: Para garantizar que el componente existe
 public class BoloController : MonoBehaviour
 {
     private GameManager gameManager;
     private Rigidbody rb;
+    private Vector3 posicionInicial;
     private bool yaContado = false;
     private bool deteccionHabilitada = false;
 
-    // Constante para la detección de inclinación
-    public float umbralInclinacion = 0.707f; // Equivalente a 45 grados
+    public float umbralInclinacion = 0.707f;
+    public float umbralDistanciaCaida = 0.1f;
 
     public bool FueDerribado => yaContado;
 
-    // Función de inicialización llamada desde PinManager
-    public void Inicializar(GameManager gm)
+    // CAMBIO: Inicializar rb en Awake, ya que es requerido.
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody>();
+    }
+
+    // CAMBIO: Se elimina la obtención de Rigidbody de aquí.
+    public void Inicializar(GameManager gm, Vector3 posInicial)
     {
         gameManager = gm;
-        rb = GetComponent<Rigidbody>();
+        posicionInicial = posInicial;
     }
 
     public void OnBoloActivado()
     {
-        // Habilita la detección después de un breve periodo para evitar caídas iniciales
         Invoke(nameof(HabilitarDeteccion), 0.5f);
     }
 
@@ -30,18 +37,20 @@ public class BoloController : MonoBehaviour
         deteccionHabilitada = true;
     }
 
-    // Llamado por PinManager
-    public void VerificarInclinacion()
+    public void VerificarCaida()
     {
         if (yaContado) return;
-
         if (!deteccionHabilitada || rb == null || rb.isKinematic) return;
 
         float inclinacion = Vector3.Dot(Vector3.up, transform.up);
+        bool estaInclinado = inclinacion < umbralInclinacion;
 
-        if (inclinacion < umbralInclinacion)
+        float distanciaMovida = Vector3.Distance(posicionInicial, transform.position);
+        bool movidoSuficiente = distanciaMovida > umbralDistanciaCaida;
+
+        if (estaInclinado || movidoSuficiente)
         {
-            RegistrarCaida("Por Inclinación (> " + (90 - Mathf.Acos(umbralInclinacion) * Mathf.Rad2Deg).ToString("F0") + "º)");
+            RegistrarCaida(); // <--- CAMBIO: Parámetro "motivo" eliminado
         }
     }
 
@@ -49,14 +58,13 @@ public class BoloController : MonoBehaviour
     {
         if (yaContado) return;
 
-        // Verifica si choca con el suelo "Fuera de Pista"
-        if (gameManager != null && other == gameManager.colliderFueraPista)
+        if (gameManager != null && other.gameObject == gameManager.colliderFueraPista.gameObject)
         {
-            RegistrarCaida("Por Salida de Pista");
+            RegistrarCaida(); // <--- CAMBIO: Parámetro "motivo" eliminado
         }
     }
 
-    private void RegistrarCaida(string motivo)
+    private void RegistrarCaida() // <--- CAMBIO: Parámetro "motivo" eliminado
     {
         if (yaContado) return;
 
