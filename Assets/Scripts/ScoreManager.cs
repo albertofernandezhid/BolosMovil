@@ -29,7 +29,6 @@ public class JugadorUI
     public List<FrameScore> framesUI = new();
 }
 
-
 public class ScoreManager : MonoBehaviour
 {
     [Header("CONFIGURACION DE LA PARTIDA")]
@@ -44,6 +43,7 @@ public class ScoreManager : MonoBehaviour
 
     private readonly List<Jugador> listaJugadores = new();
     private GameManager gameManager;
+    private MenuManager menuManager;
 
     [Header("REFERENCIAS UI DE TURNO")]
     public Canvas panelDeTurno;
@@ -59,12 +59,16 @@ public class ScoreManager : MonoBehaviour
 
     private readonly List<JugadorUI> listaUIJugadores = new();
 
-
     void Awake()
     {
         if (gameManager == null)
         {
             gameManager = FindFirstObjectByType<GameManager>();
+        }
+
+        if (menuManager == null)
+        {
+            menuManager = FindFirstObjectByType<MenuManager>();
         }
 
         if (botonSiguienteLanzamiento != null)
@@ -183,7 +187,7 @@ public class ScoreManager : MonoBehaviour
                     {
                         GameObject frameObj = Instantiate(frameScorePrefab, contenedorFrames);
 
-                        FrameScore frameScript = frameObj.GetComponentInChildren<FrameScore>(true); 
+                        FrameScore frameScript = frameObj.GetComponentInChildren<FrameScore>(true);
 
                         if (frameScript != null)
                         {
@@ -203,9 +207,8 @@ public class ScoreManager : MonoBehaviour
         if (uiActual == null) return;
 
         int index = frame - 1;
-        int puntuacionTotalRecalculada = 0; 
+        int puntuacionTotalRecalculada = 0;
 
-        // 1. Actualizar la UI del frame actual (Tiro 1, Tiro 2 y Total Acumulado del frame)
         if (index >= 0 && index < uiActual.framesUI.Count)
         {
             FrameScore frameUI = uiActual.framesUI[index];
@@ -222,30 +225,24 @@ public class ScoreManager : MonoBehaviour
                     tiro2 = jugadorActual.lanzamientosFrame[1].ToString();
                 }
             }
-            
+
             string totalAcumulado = jugadorActual.framesCompletados[index] > 0 ? jugadorActual.framesCompletados[index].ToString() : "";
 
             frameUI.ActualizarFrameUI(tiro1, tiro2, totalAcumulado);
         }
-        
-        // 2. Calcular la PUNTUACIÓN TOTAL GLOBAL (Actualizada con cada lanzamiento)
-        
-        // A. Sumar las puntuaciones de frames YA COMPLETADOS
+
         for (int i = 0; i < maxFrames; i++)
         {
             puntuacionTotalRecalculada += jugadorActual.framesCompletados[i];
         }
 
-        // B. Sumar la puntuación PROVISIONAL del frame actual.
-        // Se suma el valor actual de los bolos derribados en este frame SOLO si no ha sido finalizado.
         if (jugadorActual.lanzamientosFrame.Count > 0 && jugadorActual.framesCompletados[index] == 0)
         {
             puntuacionTotalRecalculada += jugadorActual.lanzamientosFrame.Sum();
         }
 
         jugadorActual.puntuacionTotal = puntuacionTotalRecalculada;
-        
-        // C. Actualizar la UI de la puntuación global
+
         if (uiActual.totalGlobalTMP != null)
         {
             uiActual.totalGlobalTMP.text = $"Puntos totales: {jugadorActual.puntuacionTotal}";
@@ -288,13 +285,13 @@ public class ScoreManager : MonoBehaviour
         {
             textoPanelTurno.text = $"{jugadorActual.nombre} - Frame {frameActual}\nBolos caidos: {bolosDerribadosEnLanzamiento}";
         }
-        
-        if (panelDeTurno != null) 
+
+        if (panelDeTurno != null)
         {
             panelDeTurno.gameObject.SetActive(true);
         }
-        
-        Time.timeScale = 0f;
+
+        // Time.timeScale se gestiona en MenuManager.MostrarPanelScore()
     }
 
     private void DesactivarBotonesDeTurno()
@@ -306,9 +303,12 @@ public class ScoreManager : MonoBehaviour
 
     public void ContinuarLanzamiento()
     {
-        Time.timeScale = 1f;
-        if (panelDeTurno != null) panelDeTurno.gameObject.SetActive(false);
         DesactivarBotonesDeTurno();
+
+        if (menuManager != null)
+        {
+            menuManager.OcultarPanelScore(); // Time.timeScale = 1f; gameUI.SetActive(true);
+        }
 
         if (gameManager != null)
         {
@@ -320,19 +320,21 @@ public class ScoreManager : MonoBehaviour
 
     public void FinalizarTurnoYPasar()
     {
-        Time.timeScale = 1f;
-        if (panelDeTurno != null) panelDeTurno.gameObject.SetActive(false);
         DesactivarBotonesDeTurno();
+
+        if (menuManager != null)
+        {
+            menuManager.OcultarPanelScore(); // Time.timeScale = 1f; gameUI.SetActive(true);
+        }
 
         PasarTurno();
     }
 
     public void SalirAlMenu()
     {
-        Time.timeScale = 1f;
-        if (gameManager != null)
+        if (menuManager != null)
         {
-            gameManager.ReiniciarJuego();
+            menuManager.MostrarMainMenu(); // Incluye Time.timeScale = 0f;
         }
     }
 

@@ -36,14 +36,17 @@ public class GameManager : MonoBehaviour
     public GameObject panelScoreGlobal;
 
     [Header("LOGICA DE DETECCION")]
-    public BoxCollider colliderFueraPista;
-    public BoxCollider colliderFinalPista;
     public float tiempoDetencionParaPanel = 2f;
     public float umbralVelocidadBola = 0.1f;
     public float tiempoEsperaConteoBolos = 1.0f;
+    public BoxCollider colliderFueraPista;
+    public BoxCollider colliderFinalPista;
 
     [Header("CONTROL DE BARRERAS")]
     public GameObject barrerasLaterales;
+
+    [Header("REFERENCIAS MENU")]
+    public MenuManager menuManager;
 
     private bool usarBarreras = false;
     public bool UsarBarreras => usarBarreras;
@@ -53,9 +56,7 @@ public class GameManager : MonoBehaviour
     private const int TOTAL_BOLOS = 10;
     private bool detencionProcesada = false;
     private float tiempoBolaQuieta = 0f;
-
     private bool bolaLlegoAlFinal = false;
-
     private float tiempoEnFinalCamara = 0f;
 
     public enum EstadoJuego { Posicionamiento, Carga, Lanzada, Finalizado }
@@ -68,6 +69,11 @@ public class GameManager : MonoBehaviour
         if (scoreManager == null)
         {
             scoreManager = FindFirstObjectByType<ScoreManager>();
+        }
+
+        if (menuManager == null)
+        {
+            menuManager = FindFirstObjectByType<MenuManager>();
         }
 
         if (bola != null)
@@ -89,12 +95,14 @@ public class GameManager : MonoBehaviour
         {
             botonLanzar.onClick.RemoveAllListeners();
             botonLanzar.onClick.AddListener(OnBotonLanzarClick);
+            botonLanzar.gameObject.SetActive(false);
         }
 
         if (botonToggleBarreras != null)
         {
             botonToggleBarreras.onClick.RemoveAllListeners();
             botonToggleBarreras.onClick.AddListener(ToggleBarreras);
+            botonToggleBarreras.gameObject.SetActive(false);
         }
 
         if (botonReiniciar != null)
@@ -104,13 +112,18 @@ public class GameManager : MonoBehaviour
             botonReiniciar.gameObject.SetActive(false);
         }
 
-        if (scoreManager != null)
+        if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(false);
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
+        if (panelFinal != null) panelFinal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+
+        topCamera.gameObject.SetActive(false);
+        preLaunchCamera.gameObject.SetActive(false);
+        ballCamera.gameObject.SetActive(false);
+
+        if (menuManager != null)
         {
-            scoreManager.IniciarPartidaMultijugador(1);
-        }
-        else
-        {
-            IniciarJuego();
+            menuManager.MostrarMainMenu();
         }
     }
 
@@ -273,21 +286,14 @@ public class GameManager : MonoBehaviour
         FinalizarLanzamientoYMostrarPanel();
     }
 
-
     void FinalizarLanzamientoYMostrarPanel()
     {
         estadoActual = EstadoJuego.Finalizado;
 
-        // La actualización de la puntuación ya se realiza en ScoreManager.MostrarPanelDeTurno
-
-        if (panelScoreGlobal != null)
+        if (menuManager != null)
         {
-            panelScoreGlobal.SetActive(true);
+            menuManager.MostrarPanelScore();
         }
-
-        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
-
-        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(false);
 
         if (panelFinal != null && scoreManager != null && scoreManager.jugadorActual != null)
         {
@@ -331,10 +337,10 @@ public class GameManager : MonoBehaviour
             scoreManager.ActualizarUIFrame(scoreManager.frameActual);
         }
 
-        ActualizarPuntuacionSimple(); // Llama a la función para actualizar el texto
+        ActualizarPuntuacionSimple();
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
-        if (panelScoreGlobal != null) panelScoreGlobal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 
@@ -363,10 +369,10 @@ public class GameManager : MonoBehaviour
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
         if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
 
-        ActualizarPuntuacionSimple(); // Llama a la función para actualizar el texto
+        ActualizarPuntuacionSimple();
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
-        if (panelScoreGlobal != null) panelScoreGlobal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 
@@ -393,7 +399,6 @@ public class GameManager : MonoBehaviour
     {
         if (textoPuntuacion != null && scoreManager != null && scoreManager.jugadorActual != null)
         {
-            // Muestra el nombre del jugador y su puntuación total
             textoPuntuacion.text = $"{scoreManager.jugadorActual.nombre} | Puntos: {scoreManager.jugadorActual.puntuacionTotal}";
         }
     }
