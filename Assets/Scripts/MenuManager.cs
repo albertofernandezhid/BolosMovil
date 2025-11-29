@@ -10,10 +10,11 @@ public class MenuManager : MonoBehaviour
     public GameObject pauseMenuPanel;
     public GameObject gameUI;
     public GameObject scorePanel;
+    public GameObject opcionesPanel;
 
     [Header("Referencias de Scripts")]
     public GameManager gameManager;
-    public ScoreManager scoreManager; // Esta referencia es clave
+    public ScoreManager scoreManager;
 
     private void Start()
     {
@@ -30,6 +31,7 @@ public class MenuManager : MonoBehaviour
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (gameUI != null) gameUI.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(false);
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
     }
 
     public void MostrarOptionsMenu()
@@ -44,12 +46,28 @@ public class MenuManager : MonoBehaviour
         MostrarMainMenu();
     }
 
+    public void ToggleOpciones()
+    {
+        if (opcionesPanel != null)
+        {
+            opcionesPanel.SetActive(!opcionesPanel.activeSelf);
+
+            if (gameUI != null && !opcionesPanel.activeSelf)
+            {
+                gameUI.SetActive(true);
+            }
+
+            if (scorePanel != null) scorePanel.SetActive(false);
+        }
+    }
+
     public void PausarJuego()
     {
         Time.timeScale = 0f;
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(true);
         if (gameUI != null) gameUI.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(false);
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
     }
 
     public void ReanudarJuego()
@@ -57,6 +75,7 @@ public class MenuManager : MonoBehaviour
         Time.timeScale = 1f;
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (gameUI != null) gameUI.SetActive(true);
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
     }
 
     public void IniciarPartida()
@@ -67,6 +86,7 @@ public class MenuManager : MonoBehaviour
         if (optionsMenuPanel != null) optionsMenuPanel.SetActive(false);
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(false);
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
 
         if (gameUI != null) gameUI.SetActive(true);
 
@@ -76,12 +96,38 @@ public class MenuManager : MonoBehaviour
         }
     }
 
+    // Usada por GameManager después de un lanzamiento
     public void MostrarPanelScore()
     {
         Time.timeScale = 0f;
         if (gameUI != null) gameUI.SetActive(false);
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(true);
+
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
+
+        // El GameManager (o ScoreManager.MostrarPanelDeTurno) es quien configura los botones de SIGUIENTE.
+        // Aquí solo nos aseguramos de que no se muestre el botón Reanudar si no es el caso.
+        if (scoreManager != null)
+        {
+            scoreManager.ConfigurarPanelScoreParaReanudar(false);
+        }
+    }
+
+    // Usada por el botón Score/Opciones en PanelJuego
+    public void MostrarPanelScoreDesdeOpciones()
+    {
+        Time.timeScale = 0f;
+        if (gameUI != null) gameUI.SetActive(false);
+        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
+        if (scorePanel != null) scorePanel.SetActive(true);
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
+
+        // CLAVE: SOLO llama a ConfigurarPanelScoreParaReanudar(true) para mostrar el botón REANUDAR.
+        if (scoreManager != null)
+        {
+            scoreManager.ConfigurarPanelScoreParaReanudar(true);
+        }
     }
 
     public void OcultarPanelScore()
@@ -100,25 +146,17 @@ public class MenuManager : MonoBehaviour
         IniciarPartida();
     }
 
-    // Nueva función para reiniciar el juego sin recargar la escena
     public void ReiniciarPartida()
     {
         if (scoreManager != null)
         {
-            // 1. Obtener el número de jugadores que se estaba usando.
             int numJugadores = scoreManager.numJugadoresActuales;
-
-            // 2. Ejecutar la lógica de inicio de partida con ese número.
             IniciarPartidaConJugadores(numJugadores);
-
-            // 3. Ocultar el panel de pausa
             if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         }
         else
         {
-            // Fallback en caso de que ScoreManager no esté disponible
             Debug.LogError("ScoreManager no está asignado o disponible para reiniciar la partida.");
-            // Si falla, al menos salimos de la pausa
             ReanudarJuego();
         }
     }

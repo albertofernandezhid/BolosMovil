@@ -46,16 +46,22 @@ public class ScoreManager : MonoBehaviour
     private MenuManager menuManager;
 
     [Header("REFERENCIAS UI DE TURNO")]
-    public Canvas panelDeTurno;
+    public GameObject panelDeTurno;
     public Button botonSiguienteLanzamiento;
     public Button botonSiguienteJugador;
     public Button botonSalirAlMenu;
+    public Button botonReanudar;
     public TextMeshProUGUI textoPanelTurno;
 
     [Header("GESTION DE UI DE PUNTUACION (MULTIJUGADOR)")]
     public GameObject panelScoreJugadorPrefab;
     public Transform contenedorJugadoresRaiz;
     public GameObject frameScorePrefab;
+
+    [Header("AJUSTE DE SCROLL")]
+    public RectTransform contenedorContentRt;
+    public float alturaBasePanelJugador = 85f;
+    public float espaciadoVertical = 15f;
 
     private readonly List<JugadorUI> listaUIJugadores = new();
 
@@ -86,8 +92,60 @@ public class ScoreManager : MonoBehaviour
             botonSalirAlMenu.onClick.RemoveAllListeners();
             botonSalirAlMenu.onClick.AddListener(SalirAlMenu);
         }
+        if (botonReanudar != null)
+        {
+            botonReanudar.onClick.RemoveAllListeners();
+            botonReanudar.onClick.AddListener(ReanudarJuegoDesdeScore);
+        }
 
         if (panelDeTurno != null) panelDeTurno.gameObject.SetActive(false);
+    }
+
+    public void ReanudarJuegoDesdeScore()
+    {
+        if (menuManager != null)
+        {
+            menuManager.OcultarPanelScore();
+        }
+
+        if (gameManager != null)
+        {
+            int lanzamientosActuales = jugadorActual.lanzamientosFrame.Count;
+            string mensaje;
+
+            if (lanzamientosActuales == 0)
+            {
+                mensaje = $"{jugadorActual.nombre}, Frame {frameActual} (Tiro 1). Arrastra para mover.";
+            }
+            else
+            {
+                mensaje = $"{jugadorActual.nombre}, Frame {frameActual} (Tiro 2). Arrastra para mover.";
+            }
+
+            gameManager.ReanudarEstadoActual(mensaje);
+        }
+    }
+
+    public void ConfigurarPanelScoreParaReanudar(bool llamadoDesdeOpciones)
+    {
+        if (panelDeTurno == null) return;
+
+        if (llamadoDesdeOpciones)
+        {
+            if (botonReanudar != null) botonReanudar.gameObject.SetActive(true);
+            if (botonSiguienteLanzamiento != null) botonSiguienteLanzamiento.gameObject.SetActive(false);
+            if (botonSiguienteJugador != null) botonSiguienteJugador.gameObject.SetActive(false);
+            if (botonSalirAlMenu != null) botonSalirAlMenu.gameObject.SetActive(true);
+
+            if (textoPanelTurno != null)
+            {
+                textoPanelTurno.text = "Puntuación actual de la partida. Pulsa Reanudar para continuar.";
+            }
+        }
+        else
+        {
+            if (botonReanudar != null) botonReanudar.gameObject.SetActive(false);
+        }
     }
 
     public void IniciarPartidaMultijugador(int num)
@@ -199,6 +257,32 @@ public class ScoreManager : MonoBehaviour
 
             listaUIJugadores.Add(ui);
         }
+
+        AjustarAlturaContentDinamica();
+    }
+
+    private void AjustarAlturaContentDinamica()
+    {
+        if (contenedorContentRt == null)
+        {
+            return;
+        }
+
+        int numJugadores = listaJugadores.Count;
+
+        if (numJugadores == 0)
+        {
+            contenedorContentRt.sizeDelta = new Vector2(contenedorContentRt.sizeDelta.x, 0f);
+            return;
+        }
+
+        float alturaTotalPaneles = numJugadores * alturaBasePanelJugador;
+
+        float alturaTotalEspaciado = (numJugadores - 1) * espaciadoVertical;
+
+        float nuevaAlturaContent = alturaTotalPaneles + alturaTotalEspaciado;
+
+        contenedorContentRt.sizeDelta = new Vector2(contenedorContentRt.sizeDelta.x, nuevaAlturaContent);
     }
 
     public void ActualizarUIFrame(int frame)
@@ -255,6 +339,7 @@ public class ScoreManager : MonoBehaviour
         int lanzamientosRealizados = jugadorActual.lanzamientosFrame.Count;
         int bolosTotalesDerribadosFrame = jugadorActual.lanzamientosFrame.Sum();
 
+        if (botonReanudar != null) botonReanudar.gameObject.SetActive(false);
         if (botonSiguienteLanzamiento != null) botonSiguienteLanzamiento.gameObject.SetActive(false);
         if (botonSiguienteJugador != null) botonSiguienteJugador.gameObject.SetActive(false);
         if (botonSalirAlMenu != null) botonSalirAlMenu.gameObject.SetActive(true);
@@ -290,8 +375,6 @@ public class ScoreManager : MonoBehaviour
         {
             panelDeTurno.gameObject.SetActive(true);
         }
-
-        // Time.timeScale se gestiona en MenuManager.MostrarPanelScore()
     }
 
     private void DesactivarBotonesDeTurno()
@@ -299,6 +382,7 @@ public class ScoreManager : MonoBehaviour
         if (botonSiguienteLanzamiento != null) botonSiguienteLanzamiento.gameObject.SetActive(false);
         if (botonSiguienteJugador != null) botonSiguienteJugador.gameObject.SetActive(false);
         if (botonSalirAlMenu != null) botonSalirAlMenu.gameObject.SetActive(false);
+        if (botonReanudar != null) botonReanudar.gameObject.SetActive(false);
     }
 
     public void ContinuarLanzamiento()
@@ -307,7 +391,7 @@ public class ScoreManager : MonoBehaviour
 
         if (menuManager != null)
         {
-            menuManager.OcultarPanelScore(); // Time.timeScale = 1f; gameUI.SetActive(true);
+            menuManager.OcultarPanelScore();
         }
 
         if (gameManager != null)
@@ -324,7 +408,7 @@ public class ScoreManager : MonoBehaviour
 
         if (menuManager != null)
         {
-            menuManager.OcultarPanelScore(); // Time.timeScale = 1f; gameUI.SetActive(true);
+            menuManager.OcultarPanelScore();
         }
 
         PasarTurno();
@@ -334,7 +418,7 @@ public class ScoreManager : MonoBehaviour
     {
         if (menuManager != null)
         {
-            menuManager.MostrarMainMenu(); // Incluye Time.timeScale = 0f;
+            menuManager.MostrarMainMenu();
         }
     }
 

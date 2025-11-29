@@ -30,6 +30,7 @@ public class GameManager : MonoBehaviour
     public Button botonLanzar;
     public Button botonToggleBarreras;
     public Button botonReiniciar;
+    public Button botonOpciones;
     public TextMeshProUGUI textoInstrucciones;
     public TextMeshProUGUI textoPuntuacion;
     public Canvas panelFinal;
@@ -102,7 +103,13 @@ public class GameManager : MonoBehaviour
         {
             botonToggleBarreras.onClick.RemoveAllListeners();
             botonToggleBarreras.onClick.AddListener(ToggleBarreras);
-            botonToggleBarreras.gameObject.SetActive(false);
+        }
+
+        if (botonOpciones != null)
+        {
+            botonOpciones.onClick.RemoveAllListeners();
+            botonOpciones.onClick.AddListener(OnBotonOpcionesClick);
+            botonOpciones.gameObject.SetActive(false);
         }
 
         if (botonReiniciar != null)
@@ -166,6 +173,14 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    public void OnBotonOpcionesClick()
+    {
+        if (menuManager != null)
+        {
+            menuManager.ToggleOpciones();
+        }
+    }
+
     public void IniciarJuego()
     {
         if (pinManager != null) pinManager.ReiniciarBolos();
@@ -187,7 +202,7 @@ public class GameManager : MonoBehaviour
         if (textoInstrucciones != null) textoInstrucciones.text = "Arrastra para mover horizontalmente";
         if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(true);
 
-        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
+        if (botonOpciones != null) botonOpciones.gameObject.SetActive(true);
 
         topCamera.gameObject.SetActive(true);
         preLaunchCamera.gameObject.SetActive(false);
@@ -228,7 +243,12 @@ public class GameManager : MonoBehaviour
         ballCamera.gameObject.SetActive(true);
         if (textoInstrucciones != null) textoInstrucciones.gameObject.SetActive(false);
 
-        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(false);
+        if (botonOpciones != null) botonOpciones.gameObject.SetActive(false);
+
+        if (menuManager != null && menuManager.opcionesPanel != null)
+        {
+            menuManager.opcionesPanel.SetActive(false);
+        }
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
     }
@@ -330,7 +350,7 @@ public class GameManager : MonoBehaviour
         }
 
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
-        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
+        if (botonOpciones != null) botonOpciones.gameObject.SetActive(true);
 
         if (scoreManager != null)
         {
@@ -367,7 +387,7 @@ public class GameManager : MonoBehaviour
         }
 
         if (botonLanzar != null) botonLanzar.gameObject.SetActive(true);
-        if (botonToggleBarreras != null) botonToggleBarreras.gameObject.SetActive(true);
+        if (botonOpciones != null) botonOpciones.gameObject.SetActive(true);
 
         ActualizarPuntuacionSimple();
 
@@ -379,6 +399,33 @@ public class GameManager : MonoBehaviour
         topCamera.gameObject.SetActive(true);
         preLaunchCamera.gameObject.SetActive(false);
         ballCamera.gameObject.SetActive(false);
+    }
+
+    // NUEVA FUNCIÓN: Reanuda el juego sin avanzar el tiro.
+    public void ReanudarEstadoActual(string mensajeInstruccion)
+    {
+        if (scoreManager != null && scoreManager.jugadorActual != null)
+        {
+            int lanzamientosHechos = scoreManager.jugadorActual.lanzamientosFrame.Count;
+
+            if (lanzamientosHechos == 0)
+            {
+                // Si estaba en el Tiro 1, reseteamos todo como si fuera un turno nuevo.
+                ReiniciarRondaParaNuevoTurno(mensajeInstruccion);
+            }
+            else
+            {
+                // Si estaba en el Tiro 2, preparamos el segundo lanzamiento.
+                // Importante: No llamamos a FinalizarLanzamientoYMostrarPanel, 
+                // por lo que los bolos derribados de ese tiro no se han guardado aún.
+                PrepararSegundoLanzamiento(mensajeInstruccion);
+            }
+
+            // Asegurar que las cámaras estén en el estado correcto después de reanudar.
+            topCamera.gameObject.SetActive(true);
+            preLaunchCamera.gameObject.SetActive(false);
+            ballCamera.gameObject.SetActive(false);
+        }
     }
 
     void SeguirBolaConCamara()
