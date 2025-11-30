@@ -213,6 +213,7 @@ public class GameManager : MonoBehaviour
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
         if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
         if (panelSeleccionBola != null) panelSeleccionBola.SetActive(false);
+        if (scoreManager != null && scoreManager.panelFinalDePartida != null) scoreManager.panelFinalDePartida.SetActive(false);
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 
@@ -328,26 +329,19 @@ public class GameManager : MonoBehaviour
     {
         estadoActual = EstadoJuego.Finalizado;
 
-        if (menuManager != null)
-        {
-            menuManager.MostrarPanelScore();
-        }
+        // Desactivar UI de juego
+        if (panelFinal != null) panelFinal.gameObject.SetActive(false);
+        if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+        if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
 
-        if (panelFinal != null && scoreManager != null && scoreManager.jugadorActual != null)
-        {
-            panelFinal.gameObject.SetActive(true);
-            TextMeshProUGUI textoPanel = panelFinal.GetComponentInChildren<TextMeshProUGUI>();
-            if (textoPanel != null)
-            {
-                string nombreJugador = scoreManager.jugadorActual.nombre;
-                textoPanel.text = $"Turno terminado!\n{nombreJugador} derribo: {bolosDerribados} bolos.";
-            }
-        }
 
         if (scoreManager != null)
         {
             scoreManager.MostrarPanelDeTurno(bolosDerribados);
         }
+
+        // Si scoreManager no muestra el panel de fin de partida, mostramos el panel de turno temporal (panelFinal)
+        // Nota: ScoreManager.MostrarPanelDeTurno() llama a MenuManager.MostrarPanelScore() que se encarga de mostrar la UI de turno.
     }
 
     public void ReiniciarRondaParaNuevoTurno(string mensajeInstruccion)
@@ -379,6 +373,8 @@ public class GameManager : MonoBehaviour
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
         if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+        if (scoreManager != null && scoreManager.panelFinalDePartida != null) scoreManager.panelFinalDePartida.SetActive(false);
+
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 
@@ -411,6 +407,8 @@ public class GameManager : MonoBehaviour
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
         if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+        if (scoreManager != null && scoreManager.panelFinalDePartida != null) scoreManager.panelFinalDePartida.SetActive(false);
+
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 

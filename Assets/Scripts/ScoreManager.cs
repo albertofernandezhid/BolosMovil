@@ -63,7 +63,13 @@ public class ScoreManager : MonoBehaviour
     public float alturaBasePanelJugador = 85f;
     public float espaciadoVertical = 15f;
 
+    [Header("FIN DE PARTIDA")]
+    public GameObject panelFinalDePartida;
+    public TextMeshProUGUI scoresFinalTMP;
+
     private readonly List<JugadorUI> listaUIJugadores = new();
+
+    private const string MAX_SCORE_KEY = "MaxScoreRecord";
 
     void Awake()
     {
@@ -99,6 +105,41 @@ public class ScoreManager : MonoBehaviour
         }
 
         if (panelDeTurno != null) panelDeTurno.gameObject.SetActive(false);
+        if (panelFinalDePartida != null) panelFinalDePartida.gameObject.SetActive(false);
+    }
+
+    public int ObtenerMaxScoreGuardado()
+    {
+        return PlayerPrefs.GetInt(MAX_SCORE_KEY, 0);
+    }
+
+    private void GuardarMaxScore(int nuevoMaxScore)
+    {
+        PlayerPrefs.SetInt(MAX_SCORE_KEY, nuevoMaxScore);
+        PlayerPrefs.Save();
+        if (menuManager != null)
+        {
+            menuManager.ActualizarMaxScoreUI();
+        }
+    }
+
+    private void VerificarYActualizarMaxScore()
+    {
+        int maxPuntuacionActual = 0;
+        foreach (var jugador in listaJugadores)
+        {
+            if (jugador.puntuacionTotal > maxPuntuacionActual)
+            {
+                maxPuntuacionActual = jugador.puntuacionTotal;
+            }
+        }
+
+        int maxScoreGuardado = ObtenerMaxScoreGuardado();
+
+        if (maxPuntuacionActual > maxScoreGuardado)
+        {
+            GuardarMaxScore(maxPuntuacionActual);
+        }
     }
 
     public void ReanudarJuegoDesdeScore()
@@ -427,9 +468,11 @@ public class ScoreManager : MonoBehaviour
         jugadorActual.lanzamientosFrame.Clear();
 
         bool esUltimoJugador = (indiceJugadorActual == listaJugadores.Count - 1);
+        bool esUltimoFrame = (frameActual == maxFrames);
 
-        if (frameActual >= maxFrames && esUltimoJugador)
+        if (esUltimoFrame && esUltimoJugador)
         {
+            FinalizarPartida();
             return;
         }
 
@@ -450,6 +493,28 @@ public class ScoreManager : MonoBehaviour
             gameManager.ReiniciarRondaParaNuevoTurno(
                 $"{jugadorActual.nombre}, Frame {frameActual} (Tiro 1). Arrastra para mover."
             );
+        }
+    }
+
+    private void FinalizarPartida()
+    {
+        VerificarYActualizarMaxScore();
+
+        if (panelFinalDePartida != null)
+        {
+            panelFinalDePartida.gameObject.SetActive(true);
+
+            if (scoresFinalTMP != null)
+            {
+                scoresFinalTMP.text = "";
+                foreach (var jugador in listaJugadores.OrderByDescending(j => j.puntuacionTotal))
+                {
+                    scoresFinalTMP.text += $"{jugador.nombre} | {jugador.puntuacionTotal} puntos\n";
+                }
+
+                // Configurar alineación para el final de partida
+                scoresFinalTMP.alignment = TextAlignmentOptions.Center;
+            }
         }
     }
 }

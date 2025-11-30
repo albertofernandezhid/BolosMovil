@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using TMPro;
+using System.Collections;
 
 public class MenuManager : MonoBehaviour
 {
@@ -12,13 +14,61 @@ public class MenuManager : MonoBehaviour
     public GameObject scorePanel;
     public GameObject opcionesPanel;
 
+    [Header("UI Max Score")]
+    public TextMeshProUGUI maxScoreTMP;
+    public float blinkSpeed = 0.5f;
+
     [Header("Referencias de Scripts")]
     public GameManager gameManager;
     public ScoreManager scoreManager;
 
+    private Coroutine blinkCoroutine;
+
     private void Start()
     {
         MostrarMainMenu();
+    }
+
+    public void ActualizarMaxScoreUI()
+    {
+        if (maxScoreTMP == null || scoreManager == null) return;
+
+        int maxScore = scoreManager.ObtenerMaxScoreGuardado();
+
+        if (maxScore > 0)
+        {
+            maxScoreTMP.text = $"Max score: {maxScore}";
+            maxScoreTMP.fontSize = 36;
+            maxScoreTMP.alignment = TextAlignmentOptions.Center;
+            maxScoreTMP.gameObject.SetActive(true);
+
+            if (blinkCoroutine != null)
+            {
+                StopCoroutine(blinkCoroutine);
+            }
+            blinkCoroutine = StartCoroutine(BlinkEffect());
+        }
+        else
+        {
+            maxScoreTMP.gameObject.SetActive(false);
+            if (blinkCoroutine != null)
+            {
+                StopCoroutine(blinkCoroutine);
+                blinkCoroutine = null;
+            }
+        }
+    }
+
+    private IEnumerator BlinkEffect()
+    {
+        while (true)
+        {
+            if (maxScoreTMP != null)
+            {
+                maxScoreTMP.alpha = (maxScoreTMP.alpha > 0.1f) ? 0f : 1f;
+            }
+            yield return new WaitForSecondsRealtime(blinkSpeed);
+        }
     }
 
     public void MostrarMainMenu()
@@ -33,6 +83,9 @@ public class MenuManager : MonoBehaviour
         if (scorePanel != null) scorePanel.SetActive(false);
         if (opcionesPanel != null) opcionesPanel.SetActive(false);
         if (gameManager != null && gameManager.panelSeleccionBola != null) gameManager.panelSeleccionBola.SetActive(false);
+        if (scoreManager != null && scoreManager.panelFinalDePartida != null) scoreManager.panelFinalDePartida.SetActive(false);
+
+        ActualizarMaxScoreUI();
     }
 
     public void MostrarOptionsMenu()
@@ -152,7 +205,6 @@ public class MenuManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError("ScoreManager no está asignado o disponible para reiniciar la partida.");
             ReanudarJuego();
         }
     }
@@ -166,9 +218,6 @@ public class MenuManager : MonoBehaviour
     public void SalirJuego()
     {
         Application.Quit();
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#endif
     }
 
     public void OnBotonAbrirSeleccionBola()
