@@ -49,6 +49,11 @@ public class GameManager : MonoBehaviour
     [Header("REFERENCIAS MENU")]
     public MenuManager menuManager;
 
+    [Header("LOGICA DE BOLA DINAMICA")]
+    public GameObject panelSeleccionBola;
+    public BallConfig[] configuracionesBola;
+    private Renderer bolaRenderer;
+
     private bool usarBarreras = false;
     public bool UsarBarreras => usarBarreras;
 
@@ -80,10 +85,21 @@ public class GameManager : MonoBehaviour
         if (bola != null)
         {
             bolaRb = bola.GetComponent<Rigidbody>();
+            bolaRenderer = bola.GetComponent<Renderer>();
+
             if (bolaRb != null)
             {
                 bolaRb.isKinematic = true;
                 bolaRb.interpolation = RigidbodyInterpolation.Interpolate;
+            }
+
+            if (configuracionesBola.Length > 0)
+            {
+                BallConfig configInicial = EncontrarConfiguracionPorMasa(5f);
+                if (configInicial != null)
+                {
+                    AplicarConfiguracionBola(configInicial);
+                }
             }
         }
 
@@ -123,6 +139,7 @@ public class GameManager : MonoBehaviour
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(false);
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
         if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+        if (panelSeleccionBola != null) panelSeleccionBola.SetActive(false);
 
         topCamera.gameObject.SetActive(false);
         preLaunchCamera.gameObject.SetActive(false);
@@ -195,6 +212,7 @@ public class GameManager : MonoBehaviour
 
         if (panelFinal != null) panelFinal.gameObject.SetActive(false);
         if (panelScoreGlobal != null) panelScoreGlobal.SetActive(false);
+        if (panelSeleccionBola != null) panelSeleccionBola.SetActive(false);
 
         if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(true);
 
@@ -401,7 +419,6 @@ public class GameManager : MonoBehaviour
         ballCamera.gameObject.SetActive(false);
     }
 
-    // NUEVA FUNCIÓN: Reanuda el juego sin avanzar el tiro.
     public void ReanudarEstadoActual(string mensajeInstruccion)
     {
         if (scoreManager != null && scoreManager.jugadorActual != null)
@@ -410,18 +427,13 @@ public class GameManager : MonoBehaviour
 
             if (lanzamientosHechos == 0)
             {
-                // Si estaba en el Tiro 1, reseteamos todo como si fuera un turno nuevo.
                 ReiniciarRondaParaNuevoTurno(mensajeInstruccion);
             }
             else
             {
-                // Si estaba en el Tiro 2, preparamos el segundo lanzamiento.
-                // Importante: No llamamos a FinalizarLanzamientoYMostrarPanel, 
-                // por lo que los bolos derribados de ese tiro no se han guardado aún.
                 PrepararSegundoLanzamiento(mensajeInstruccion);
             }
 
-            // Asegurar que las cámaras estén en el estado correcto después de reanudar.
             topCamera.gameObject.SetActive(true);
             preLaunchCamera.gameObject.SetActive(false);
             ballCamera.gameObject.SetActive(false);
@@ -446,7 +458,8 @@ public class GameManager : MonoBehaviour
     {
         if (textoPuntuacion != null && scoreManager != null && scoreManager.jugadorActual != null)
         {
-            textoPuntuacion.text = $"{scoreManager.jugadorActual.nombre} | Puntos: {scoreManager.jugadorActual.puntuacionTotal}";
+            string nombreBola = (bolaRb != null && bolaRb.mass > 0) ? $" (Bola Mass{bolaRb.mass})" : "";
+            textoPuntuacion.text = $"{scoreManager.jugadorActual.nombre} | Puntos: {scoreManager.jugadorActual.puntuacionTotal}{nombreBola}";
         }
     }
 
@@ -488,5 +501,60 @@ public class GameManager : MonoBehaviour
     {
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    // --- LOGICA DE SELECCION DE BOLA ---
+
+    private BallConfig EncontrarConfiguracionPorMasa(float masa)
+    {
+        foreach (var config in configuracionesBola)
+        {
+            if (config.masa == masa)
+            {
+                return config;
+            }
+        }
+        Debug.LogError($"Configuración de bola con masa {masa} no encontrada.");
+        return null;
+    }
+
+    public void AplicarConfiguracionBola(BallConfig config)
+    {
+        if (bolaRenderer != null)
+        {
+            bolaRenderer.material = config.material;
+        }
+
+        if (bolaRb != null)
+        {
+            bolaRb.mass = config.masa;
+        }
+
+        Debug.Log($"Bola seleccionada: {config.nombre} (Masa: {config.masa})");
+
+        ActivarPanelSeleccionBola(false);
+
+        ActualizarPuntuacionSimple();
+    }
+
+    public void OnBotonSeleccionarBolaClick(float masaDeseada)
+    {
+        BallConfig config = EncontrarConfiguracionPorMasa(masaDeseada);
+        if (config != null)
+        {
+            AplicarConfiguracionBola(config);
+        }
+    }
+
+    public void ActivarPanelSeleccionBola(bool activar)
+    {
+        if (panelSeleccionBola != null)
+        {
+            panelSeleccionBola.SetActive(activar);
+
+            Time.timeScale = activar ? 0f : 1f;
+
+            if (textoPuntuacion != null) textoPuntuacion.gameObject.SetActive(!activar);
+        }
     }
 }

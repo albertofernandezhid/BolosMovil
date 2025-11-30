@@ -7,34 +7,29 @@ public class BallPhysicsController : MonoBehaviour
     private GameManager gameManager;
 
     [Header("AJUSTES DE FÍSICA Y VELOCIDAD")]
-    public float velocidadMaxEstabilidad = 30.0f;
-    // Umbral de velocidad para iniciar el drift hacia los laterales
-    public float velocidadMaxDrift = 3.0f;
-    // Fuerza máxima de empuje lateral cuando la bola es lenta (ajustar a 8.0f o más)
-    public float driftFuerzaBase = 8.0f;
+    public float velocidadMaxEstabilidad = 35.0f;
+    public float velocidadMaxDrift = 8.0f;
+    public float velocidadMinEfecto = 15.0f;
     public float deadZoneX = 0.25f;
 
-    [Header("ESTABILIDAD (Rectitud)")]
-    public float maxAngularDamping = 0.8f;
-    public float minAngularDamping = 0.1f;
+    [Header("FUERZAS BASE (Serán escaladas por la Masa)")]
+    public float driftFuerzaBase = 35.0f;
+    public float fuerzaEfectoCurvaBase = 4.0f;
+    public float fuerzaEmpujeBarrerasBase = 10.0f;
 
-    [Header("DRIFT DE EFECTO (Curva)")]
-    // Umbral a partir del cual se aplica el drift de curva (lanzamiento muy fuerte)
-    public float velocidadMinEfecto = 15.0f;
-    // Fuerza lateral constante para el efecto de curva
-    public float fuerzaEfectoCurva = 0.5f;
+    [Header("ESTABILIDAD (Rectitud)")]
+    public float velocidadOptimaEstabilidad = 12.0f;
+    public float factorEstabilidadMax = 0.9f;
+    public float factorEstabilidadMin = 0.1f;
 
     [Header("CONTROL DE BARRERAS")]
-    // Fuerza mínima para empujar la bola hacia adelante si las barreras están activas y la bola es lenta
-    public float fuerzaEmpujeBarreras = 5.0f; // Aumentado para asegurar inercia
-
-    // CONSTANTES PRIVADAS
-    // Borde máximo de la pista para normalizar la distancia (desde BallLauncher)
-    private const float MAX_X_BOUNDARY = 0.6f;
-    // Factor mínimo de drift aplicado (incluso en el centro de la pista)
+    private const float MASA_BASE_CALIBRACION = 5.0f;
+    private const float PISTA_ANCHO_X = 1.5f;
+    private const float MAX_X_BOUNDARY = PISTA_ANCHO_X / 2f;
     private const float MIN_DRIFT_FACTOR = 0.2f;
 
     private int driftDireccionAleatoria = 0;
+    private float driftFactorPorMasa = 1f;
 
     void Start()
     {
@@ -43,16 +38,15 @@ public class BallPhysicsController : MonoBehaviour
         gameManager = Object.FindFirstObjectByType<GameManager>();
         if (gameManager == null) Debug.LogError("BallPhysicsController no encontró GameManager.");
 
-        // Inicializa una dirección lateral aleatoria si la bola empieza en el centro
         if (Mathf.Abs(transform.position.x) < deadZoneX)
         {
             driftDireccionAleatoria = (Random.Range(0, 2) == 0) ? -1 : 1;
         }
 
-        // Corrección del problema de "tirones"
         if (rb != null)
         {
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+            driftFactorPorMasa = MASA_BASE_CALIBRACION / rb.mass;
         }
     }
 
@@ -62,82 +56,93 @@ public class BallPhysicsController : MonoBehaviour
 
         float velocidadActual = rb.linearVelocity.magnitude;
 
-        // --- LÓGICA DE BARRERAS (PRIORIDAD ALTA) ---
         if (gameManager != null && gameManager.UsarBarreras)
         {
-            // Aplicamos estabilidad
             ManejarEstabilidad(velocidadActual);
-
-            // Empuje de inercia: Si la velocidad Z es muy baja, la empujamos hacia adelante
-            // **Este empuje asegura que la bola siga rodando por inercia junto a la barrera.**
-            if (rb.linearVelocity.z < 1.0f)
-            {
-                rb.AddForce(Vector3.forward * fuerzaEmpujeBarreras, ForceMode.Acceleration);
-            }
-            return; // No aplicamos ningún drift lateral (ni bajo, ni efecto curva).
+            ManejarBarreras();
+            return;
         }
-        // ------------------------------------------
 
-        // Si las barreras están DESACTIVADAS, aplicamos toda la física normal:
         ManejarEstabilidad(velocidadActual);
         ManejarDrift(velocidadActual);
     }
 
+    void ManejarBarreras()
+    {
+        float masaActual = rb.mass;
+        float factorEscaladoBarrera = masaActual / MASA_BASE_CALIBRACION;
+        float fuerzaEmpujeBarrerasEscalada = fuerzaEmpujeBarrerasBase * factorEscaladoBarrera;
+
+        if (rb.linearVelocity.z < 1.0f)
+        {
+            rb.AddForce(Vector3.forward * fuerzaEmpujeBarrerasEscalada, ForceMode.Acceleration);
+        }
+    }
+
     void ManejarEstabilidad(float velocidad)
     {
-        float t = Mathf.Clamp01(velocidad / velocidadMaxEstabilidad);
-        rb.angularDamping = Mathf.Lerp(maxAngularDamping, minAngularDamping, t);
+        float vNorm = Mathf.Abs(velocidad - velocidadOptimaEstabilidad);
+        float t = Mathf.Clamp01(vNorm / velocidadOptimaEstabilidad);
+
+        float angularDamping = Mathf.Lerp(factorEstabilidadMin, factorEstabilidadMax, t);
+
+        rb.angularDamping = angularDamping;
+
+        float factorFuerzaEstabilidad = 1f - Mathf.Clamp01(velocidad / velocidadMaxEstabilidad);
+        float fuerzaEstabilidad = 5f * factorFuerzaEstabilidad * rb.mass;
+
+        rb.AddForce(new Vector3(-rb.linearVelocity.x, 0, 0) * fuerzaEstabilidad * Time.fixedDeltaTime, ForceMode.Acceleration);
     }
 
     void ManejarDrift(float velocidad)
     {
-        // 1. --- ZONA DE VELOCIDAD ALTA (DRIFT DE EFECTO) ---
+        float xPos = transform.position.x;
+        int direccionHorizontal;
+        Vector3 direccionCurva;
+
         if (velocidad >= velocidadMinEfecto)
         {
-            // Aplicar el efecto curva constante (ej: fijo a la derecha para un 'hook')
-            Vector3 direccionEfecto = Vector3.right;
-            rb.AddForce(direccionEfecto * fuerzaEfectoCurva, ForceMode.Acceleration);
+            if (Mathf.Abs(xPos) < deadZoneX)
+            {
+                direccionHorizontal = driftDireccionAleatoria;
+            }
+            else
+            {
+                direccionHorizontal = (xPos > 0) ? -1 : 1;
+            }
+
+            direccionCurva = (direccionHorizontal > 0) ? Vector3.right : Vector3.left;
+
+            float fuerzaCurvaEscalada = fuerzaEfectoCurvaBase * driftFactorPorMasa;
+            rb.AddForce(direccionCurva * fuerzaCurvaEscalada, ForceMode.Acceleration);
             return;
         }
 
-        // 2. --- ZONA DE VELOCIDAD MEDIA (RECTO) ---
         if (velocidad > velocidadMaxDrift && velocidad < velocidadMinEfecto)
         {
             return;
         }
 
-        // 3. --- ZONA DE VELOCIDAD BAJA (DRIFT A CANAL LATERAL) ---
         if (velocidad <= velocidadMaxDrift)
         {
-            float xPos = transform.position.x;
-            Vector3 direccionDrift;
-
-            // Determinar la dirección de drift (aleatorio en el centro, forzado al borde fuera)
             if (Mathf.Abs(xPos) < deadZoneX)
             {
-                direccionDrift = (driftDireccionAleatoria > 0) ? Vector3.right : Vector3.left;
+                direccionHorizontal = driftDireccionAleatoria;
             }
             else
             {
-                direccionDrift = (xPos > 0) ? Vector3.right : Vector3.left;
+                direccionHorizontal = (xPos > 0) ? 1 : -1;
             }
 
-            // --- CÁLCULO DE FUERZA PROPORCIONAL A LA DISTANCIA (NUEVO) ---
+            direccionCurva = (direccionHorizontal > 0) ? Vector3.right : Vector3.left;
 
-            // Factor basado en la lentitud de la bola.
             float factorLentitud = 1f - Mathf.Clamp01(velocidad / velocidadMaxDrift);
-
-            // Factor basado en la distancia al centro (0.0 en el centro, 1.0 en el borde)
             float distanciaNormalizada = Mathf.Clamp01(Mathf.Abs(xPos) / MAX_X_BOUNDARY);
-
-            // Aplicamos un factor mínimo (MIN_DRIFT_FACTOR = 0.2f) para que siempre haya drift en el centro,
-            // y luego escalamos el resto de la fuerza (0.8f) por la distancia.
             float factorDistanciaAjustado = MIN_DRIFT_FACTOR + (1.0f - MIN_DRIFT_FACTOR) * distanciaNormalizada;
 
-            // Fuerza final: fuerza base * factor de lentitud * factor de distancia ajustado
-            float fuerzaLateral = driftFuerzaBase * factorLentitud * factorDistanciaAjustado;
+            float fuerzaLateral = driftFuerzaBase * driftFactorPorMasa * factorLentitud * factorDistanciaAjustado;
 
-            rb.AddForce(direccionDrift * fuerzaLateral, ForceMode.Acceleration);
+            rb.AddForce(direccionCurva * fuerzaLateral, ForceMode.Acceleration);
         }
     }
 }

@@ -32,6 +32,7 @@ public class MenuManager : MonoBehaviour
         if (gameUI != null) gameUI.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(false);
         if (opcionesPanel != null) opcionesPanel.SetActive(false);
+        if (gameManager != null && gameManager.panelSeleccionBola != null) gameManager.panelSeleccionBola.SetActive(false);
     }
 
     public void MostrarOptionsMenu()
@@ -87,6 +88,7 @@ public class MenuManager : MonoBehaviour
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(false);
         if (opcionesPanel != null) opcionesPanel.SetActive(false);
+        if (gameManager != null && gameManager.panelSeleccionBola != null) gameManager.panelSeleccionBola.SetActive(false);
 
         if (gameUI != null) gameUI.SetActive(true);
 
@@ -96,25 +98,20 @@ public class MenuManager : MonoBehaviour
         }
     }
 
-    // Usada por GameManager después de un lanzamiento
     public void MostrarPanelScore()
     {
         Time.timeScale = 0f;
         if (gameUI != null) gameUI.SetActive(false);
         if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
         if (scorePanel != null) scorePanel.SetActive(true);
-
         if (opcionesPanel != null) opcionesPanel.SetActive(false);
 
-        // El GameManager (o ScoreManager.MostrarPanelDeTurno) es quien configura los botones de SIGUIENTE.
-        // Aquí solo nos aseguramos de que no se muestre el botón Reanudar si no es el caso.
         if (scoreManager != null)
         {
             scoreManager.ConfigurarPanelScoreParaReanudar(false);
         }
     }
 
-    // Usada por el botón Score/Opciones en PanelJuego
     public void MostrarPanelScoreDesdeOpciones()
     {
         Time.timeScale = 0f;
@@ -123,7 +120,6 @@ public class MenuManager : MonoBehaviour
         if (scorePanel != null) scorePanel.SetActive(true);
         if (opcionesPanel != null) opcionesPanel.SetActive(false);
 
-        // CLAVE: SOLO llama a ConfigurarPanelScoreParaReanudar(true) para mostrar el botón REANUDAR.
         if (scoreManager != null)
         {
             scoreManager.ConfigurarPanelScoreParaReanudar(true);
@@ -173,5 +169,16 @@ public class MenuManager : MonoBehaviour
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #endif
+    }
+
+    public void OnBotonAbrirSeleccionBola()
+    {
+        if (opcionesPanel != null) opcionesPanel.SetActive(false);
+        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
+
+        if (gameManager != null)
+        {
+            gameManager.ActivarPanelSeleccionBola(true);
+        }
     }
 }
