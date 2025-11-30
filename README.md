@@ -11,6 +11,12 @@ El proyecto se centra en ofrecer una experiencia fluida e intuitiva gracias a co
 
 ---
 
+## 🎥 Gameplay (YouTube)
+
+[![Gameplay en YouTube](https://img.youtube.com/vi/Tn2CIoJNplA/maxresdefault.jpg)](https://youtu.be/Tn2CIoJNplA)
+
+---
+
 ## ⚙️ Arquitectura del proyecto
 
 El flujo del juego y la lógica de negocio están organizados mediante una arquitectura clara basada en componentes, entre ellos:
