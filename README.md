@@ -13,7 +13,7 @@ El proyecto se centra en ofrecer una experiencia fluida e intuitiva gracias a co
 
 ## 🎥 Gameplay (YouTube)
 
-[![Gameplay en YouTube](https://img.youtube.com/vi/Tn2CIoJNplA/maxresdefault.jpg)](https://youtu.be/Tn2CIoJNplA)
+[![Gameplay en YouTube](https://img.youtube.com/vi/Tn2CIoJNplA/0.jpg)](https://youtu.be/Tn2CIoJNplA)
 
 ---
 
